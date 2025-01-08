@@ -14,7 +14,6 @@
   <build_depend>geometry_msgs</build_depend>
   <build_depend>dynamixel_sdk</build_depend>
   <build_depend>realsense2_camera</build_depend>
-  <build_depend>libuvc-camera</build_depend>
   <build_depend>cv_bridge</build_depend>
 
   <build_export_depend>roscpp</build_export_depend>
@@ -23,7 +22,6 @@
   <build_export_depend>geometry_msgs</build_export_depend>
   <build_export_depend>dynamixel_sdk</build_export_depend>
   <build_export_depend>realsense2_camera</build_export_depend>
-  <build_export_depend>libuvc-camera</build_export_depend>
   <build_export_depend>cv_bridge</build_export_depend>
 
   <exec_depend>roscpp</exec_depend>
@@ -32,7 +30,7 @@
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>dynamixel_sdk</exec_depend>
   <exec_depend>realsense2_camera</exec_depend>
-  <exec_depend>libuvc-camera</exec_depend>
+  <!-- <exec_depend>libuvc-camera</exec_depend> -->
   <exec_depend>cv_bridge</exec_depend>
 
   <buildtool_depend>catkin</buildtool_depend>
