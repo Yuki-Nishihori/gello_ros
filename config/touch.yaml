@@ -1,0 +1,5 @@
+reference_frame: "/map"
+units: "mm"
+publish_rate: 1000
+prefix: "touch"
+device_name: "Default Device"

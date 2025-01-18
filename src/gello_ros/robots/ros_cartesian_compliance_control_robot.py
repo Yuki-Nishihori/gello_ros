@@ -12,6 +12,7 @@ from geometry_msgs.msg import PoseStamped, WrenchStamped
 
 from ur_pykdl import ur_kinematics
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
+import time
 
 
 class CartesianComplianceControlRobot(Robot):
@@ -39,16 +40,35 @@ class CartesianComplianceControlRobot(Robot):
             PoseStamped,
             queue_size=1,
         )
+
+        # Wait for joint_states_topic
         rospy.Subscriber(
             rospy.get_param("~joint_states_topic"),
             JointState,
             self.joint_states_callback,
         )
+        self.ros_joint_state = None
+        start_time = time.time()
+        while self.ros_joint_state is None:
+            if time.time() - start_time > 5: # wait for 5 seconds
+                rospy.logerr(f"Timeout waiting for joint_states_topic. Exiting.")
+                exit()
+            rospy.sleep(0.1)
+
+        # Wait for wrench_topic
         rospy.Subscriber(
             rospy.get_param("~wrench_topic"),
             WrenchStamped,
             self.wrench_callback,
         )
+        self._wrench = None
+        start_time = time.time()
+        while self._wrench is None:
+            if time.time() - start_time > 5:
+                rospy.logerr(f"Timeout waiting for wrench_topic. Exiting.")
+                exit()
+            rospy.sleep(0.1)
+
         self.move_group = MoveGroupCommander(
             rospy.get_param("move_group_name", "manipulator")
         )
@@ -82,7 +102,6 @@ class CartesianComplianceControlRobot(Robot):
         Returns:
             T: The current state of the leader robot.
         """
-
         # Create a dictionary for easy lookup
         joint_positions_dict = dict(
             zip(self.ros_joint_state.name, self.ros_joint_state.position)

@@ -24,10 +24,13 @@ class RobotEnv:
         robot: Robot,
         control_rate_hz: float = 100.0,
         camera_dict: Optional[Dict[str, CameraDriver]] = None,
+        control_mode: str = "joint",
     ) -> None:
+        assert control_mode in ["joint", "pose"], "control_mode must be 'joint' or 'pose'"
         self._robot = robot
         self._rate = Rate(control_rate_hz)
         self._camera_dict = {} if camera_dict is None else camera_dict
+        self._control_mode = control_mode
 
     def robot(self) -> Robot:
         """Get the robot object.
@@ -40,29 +43,25 @@ class RobotEnv:
     def __len__(self):
         return 0
 
-    def step(self, joints: np.ndarray = None, pose: np.ndarray = None) -> Dict[str, Any]:
+    def step(self, command: np.ndarray) -> Dict[str, Any]:
         """Step the environment forward.
 
         Args:
-            joints: joint angles command to step the environment with.
-            pose: optional pose command to step the environment with.
+            command: joint angles or pose command to step the environment with.
 
         Returns:
             obs: observation from the environment.
         """
-        if joints is not None and pose is not None:
-            raise ValueError("Only one of 'joints' or 'pose' should be provided, not both.")
-        
-        if joints is not None:
-            assert len(joints) == (
+        if self._control_mode == "pose":
+            assert len(command) == 7, "Pose must be a 7-element array (xyz + xyzw)."
+            self._robot.command_pose(command)
+        elif self._control_mode == "joint":
+            assert len(command) == (
                 self._robot.num_dofs()
-            ), f"input:{len(joints)}, robot:{self._robot.num_dofs()}"
-            assert self._robot.num_dofs() == len(joints)
-            self._robot.command_joint_state(joints)
-        
-        if pose is not None:
-            assert len(pose) == 7, "Pose must be a 7-element array (xyz + xyzw)."
-            self._robot.command_pose(pose)
+            ), f"input:{len(command)}, robot:{self._robot.num_dofs()}"
+            self._robot.command_joint_state(command)
+        else:
+            raise ValueError("Invalid control mode")
         
         self._rate.sleep()
         return self.get_obs()

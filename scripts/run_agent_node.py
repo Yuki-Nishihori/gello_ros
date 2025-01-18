@@ -14,6 +14,7 @@ from policy_config import (
 )  # must import first
 from gello_ros.agents.agent import DummyAgent
 from gello_ros.agents.gello_agent import GelloAgent
+from gello_ros.agents.touch_agent import TouchAgent
 from gello_ros.agents.act_agent import ACTAgent
 from gello_ros.data_utils.save_episode import save_episode
 from gello_ros.env import RobotEnv
@@ -261,6 +262,11 @@ def main():
     if agent_name == "touch":
         env = RobotEnv(robot, control_rate_hz=hz, camera_dict=camera_clients,control_mode="pose")
         print("Using 3D Systems Touch agent")
+        # Initialize obs
+        obs = env.get_obs()
+        obs["base_rgb"] = base_image
+        obs["side_rgb"] = side_image
+        agent = TouchAgent()
     elif agent_name == "dummy" or agent_name == "none":
         env = RobotEnv(robot, control_rate_hz=hz, camera_dict=camera_clients,control_mode="joint")
         agent = DummyAgent(num_dofs=robot_client.num_dofs())
@@ -285,6 +291,7 @@ def main():
         agent = ACTAgent(
             policy, camera_names, train_cfg, policy_config, task_cfg=cfg, device=device
         )
+        # Initialize obs
         obs = env.get_obs()
         obs["base_rgb"] = base_image
         obs["side_rgb"] = side_image
