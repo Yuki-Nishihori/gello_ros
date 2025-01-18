@@ -160,9 +160,10 @@ def main():
             raise NotImplementedError(
                 f"Robot {robot} not implemented, choose one of: sim_ur, xarm, ur, bimanual_ur, none"
             )
-    env = RobotEnv(robot, control_rate_hz=hz, camera_dict=camera_clients)
+    
 
     if agent_name == "gello":
+        env = RobotEnv(robot, control_rate_hz=hz, camera_dict=camera_clients,control_mode="joint")
         print("Using Gello agent")
         gello_port = gello_port
         if gello_port is None:
@@ -257,18 +258,14 @@ def main():
                     f"Joint [{j}], leader: {action[j]}, follower: {joints[j]}, diff: {action[j] - joints[j]}"
                 )
             exit()
-
-    elif agent_name == "quest":
-        from gello_ros.agents.quest_agent import SingleArmQuestAgent
-
-        agent = SingleArmQuestAgent(robot_type=robot_type, which_hand="l")
-    elif agent_name == "spacemouse":
-        from gello_ros.agents.spacemouse_agent import SpacemouseAgent
-
-        agent = SpacemouseAgent(robot_type=robot_type, verbose=verbose)
+    if agent_name == "touch":
+        env = RobotEnv(robot, control_rate_hz=hz, camera_dict=camera_clients,control_mode="pose")
+        print("Using 3D Systems Touch agent")
     elif agent_name == "dummy" or agent_name == "none":
+        env = RobotEnv(robot, control_rate_hz=hz, camera_dict=camera_clients,control_mode="joint")
         agent = DummyAgent(num_dofs=robot_client.num_dofs())
     elif agent_name == "act":
+        env = RobotEnv(robot, control_rate_hz=hz, camera_dict=camera_clients,control_mode="joint")
         # load config
         cfg = TASK_CONFIG
         policy_config = POLICY_CONFIG

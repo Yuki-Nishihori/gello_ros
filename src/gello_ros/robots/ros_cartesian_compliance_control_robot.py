@@ -114,6 +114,25 @@ class CartesianComplianceControlRobot(Robot):
 
         self.cartesian_command_publisher.publish(pose_stamped)
 
+    def command_pose(self, pose: np.ndarray) -> None:
+        """Command the leader robot to a given pose.
+
+        Args:
+            pose (np.ndarray): The pose to command the leader robot to.
+        """
+        pose_stamped = PoseStamped()
+        pose_stamped.header.stamp = rospy.Time.now()
+        pose_stamped.header.frame_id = "base_link"
+        pose_stamped.pose.position.x = pose[0]
+        pose_stamped.pose.position.y = pose[1]
+        pose_stamped.pose.position.z = pose[2]
+        pose_stamped.pose.orientation.x = pose[3]
+        pose_stamped.pose.orientation.y = pose[4]
+        pose_stamped.pose.orientation.z = pose[5]
+        pose_stamped.pose.orientation.w = pose[6]
+
+        self.cartesian_command_publisher.publish(pose_stamped)
+
     def get_observations(self) -> Dict[str, np.ndarray]:
         joints = self.get_joint_state()
         pos_quat = np.zeros(7)

@@ -40,23 +40,33 @@ class RobotEnv:
     def __len__(self):
         return 0
 
-    def step(self, joints: np.ndarray) -> Dict[str, Any]:
+    def step(self, joints: np.ndarray = None, pose: np.ndarray = None) -> Dict[str, Any]:
         """Step the environment forward.
 
         Args:
             joints: joint angles command to step the environment with.
+            pose: optional pose command to step the environment with.
 
         Returns:
             obs: observation from the environment.
         """
-        assert len(joints) == (
-            self._robot.num_dofs()
-        ), f"input:{len(joints)}, robot:{self._robot.num_dofs()}"
-        assert self._robot.num_dofs() == len(joints)
-        self._robot.command_joint_state(joints)
+        if joints is not None and pose is not None:
+            raise ValueError("Only one of 'joints' or 'pose' should be provided, not both.")
+        
+        if joints is not None:
+            assert len(joints) == (
+                self._robot.num_dofs()
+            ), f"input:{len(joints)}, robot:{self._robot.num_dofs()}"
+            assert self._robot.num_dofs() == len(joints)
+            self._robot.command_joint_state(joints)
+        
+        if pose is not None:
+            assert len(pose) == 7, "Pose must be a 7-element array (xyz + xyzw)."
+            self._robot.command_pose(pose)
+        
         self._rate.sleep()
         return self.get_obs()
-
+    
     def get_obs(self) -> Dict[str, Any]:
         """Get observation from the environment.
 
