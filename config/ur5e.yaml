@@ -37,7 +37,7 @@ cartesian_compliance_controller_command_topic: "/target_frame"
 cartesian_motion_controller_command_topic: "/target_frame"
 ee_link: "pestle_tip"
 joint_states_topic: "/joint_states"
-controller_type: "joint_trajectory_controller" # "joint_trajectory_controller" or "cartesian_compliance_controller"
+controller_type: "cartesian_compliance_controller" # "joint_trajectory_controller" or "cartesian_compliance_controller"
 wrench_topic: "/wrench/filtered"
 gello_mode: "unilateral" # "unilateral" or "bilateral"
 use_gripper: False
