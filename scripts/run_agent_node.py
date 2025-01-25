@@ -102,7 +102,6 @@ def main():
     robot_type: str = None  # only needed for quest agent or spacemouse agent
     hz: int = rospy.get_param("~control_hz", 100)
     start_joints: List[float] = rospy.get_param("~gello_start_joints")
-    gello_mode: str = rospy.get_param("~gello_mode")
     controller_type: str = rospy.get_param("~controller_type")
     use_gripper: bool = rospy.get_param("~use_gripper")
     use_FT_sensor: bool = rospy.get_param("~use_FT_sensor")
@@ -180,7 +179,7 @@ def main():
 
         gello_reset_joints = np.array(start_joints)
         # agent = GelloAgent(
-        #     port=gello_port, start_joints=gello_reset_joints, mode=gello_mode
+        #     port=gello_port, start_joints=gello_reset_joints
         # )
         agent = GelloAgent()
         time.sleep(1)
