@@ -53,34 +53,10 @@ class TouchAgent(Agent):
         pose_array[4] = msg.pose.orientation.y
         pose_array[5] = msg.pose.orientation.z
         pose_array[6] = msg.pose.orientation.w
-        
-
-        # # Convert quaternion to euler
-        # euler = tf.transformations.euler_from_quaternion([
-        #     msg.pose.orientation.x,
-        #     msg.pose.orientation.y,
-        #     msg.pose.orientation.z,
-        #     msg.pose.orientation.w
-        # ])
-
-        # # Rotate roll (r) by 180 degrees
-        # euler = (euler[0] + np.pi, euler[1], euler[2])
-
-        # # Convert back to quaternion
-        # quaternion = tf.transformations.quaternion_from_euler(*euler)
-
-        # pose_array[3] = quaternion[0]
-        # pose_array[4] = quaternion[1]
-        # pose_array[5] = quaternion[2]
-        # pose_array[6] = quaternion[3]
-
         self._touch_current_pose = pose_array
     
     def button_callback(self, msg):
-        self._button = msg.white_button
-
-            
-        
+        self._button = msg.white_button      
 
     def act(self, obs: Dict[str, np.ndarray]) -> np.ndarray:
         # if self.mode == "bilateral":
