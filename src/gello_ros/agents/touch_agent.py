@@ -19,16 +19,16 @@ import tf.transformations
 class TouchAgent(Agent):
     def __init__(
         self,
-        pose_topic: str = "/touch/pose",
-        button_topic: str = "/touch/button",
     ):
+        ee_pose_topic = rospy.get_param("~touch_ee_pose_topic")
+        button_topic = rospy.get_param("~touch_button_topic")
         self._touch_current_pose = None
         self._touch_start_pose = None
         self._robot_start_pose = None
 
         # Subscriber for pose topic
         self.pose_sub = rospy.Subscriber(
-            pose_topic, PoseStamped, self.pose_callback
+            ee_pose_topic, PoseStamped, self.pose_callback
         )
         self.button_sub = rospy.Subscriber(
             button_topic, OmniButtonEvent, self.button_callback
@@ -40,7 +40,7 @@ class TouchAgent(Agent):
         start_time = time.time()
         while self._touch_current_pose is None:
             if time.time() - start_time > 5: # wait for 5 seconds
-                rospy.logerr(f"Timeout waiting for {pose_topic} topic. Exiting.")
+                rospy.logerr(f"Timeout waiting for {ee_pose_topic} topic. Exiting.")
                 exit()
             rospy.sleep(0.1)
 

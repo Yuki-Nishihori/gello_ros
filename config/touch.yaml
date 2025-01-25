@@ -1,5 +1,6 @@
-reference_frame: "/map"
+reference_frame: "base"
 units: "mm"
 publish_rate: 1000
 prefix: "touch"
 device_name: "Default Device"
+robot_description_name: "touch_robot_description"

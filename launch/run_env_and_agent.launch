@@ -14,28 +14,16 @@
     <include file="$(find gello_ros)/launch/usb_cam.launch" />
   </group>
 
-
-  <group if="$(eval arg('agent_name') == 'gello')">
-    <node name="run_gello" pkg="gello_ros" type="run_gello.py" output="screen">
-      <rosparam command="load" file="$(arg robot_config)" />
-      <rosparam command="load" file="$(arg common_config)" />
-    </node>
-  </group>
-  <group if="$(eval arg('agent_name') == 'touch')">
-    <node name="omni_state" pkg="omni_common" type="omni_state" output="screen">
-      <rosparam command="load" file="$(arg touch_config)" />
-  </node>
-  </group>
-
   <group if="$(arg save_episode)">
     <node name="run_gui" pkg="gello_ros" type="run_GUI.py" output="screen" />
   </group>
 
-  <node name="gello_agent" pkg="gello_ros" type="run_agent_node.py" output="screen"
-    launch-prefix="bash -c 'sleep $(arg node_start_delay); $0 $@' ">
-    <rosparam command="load" file="$(arg robot_config)" />
-    <rosparam command="load" file="$(arg common_config)" />
-    <param name="save_episode" value="$(arg save_episode)" />
-    <param name="agent_name" value="$(arg agent_name)" />
-  </node>
+  <include file="$(find gello_ros)/launch/run_agent.launch" >
+    <arg name="robot_config" value="$(arg robot_config)" />
+    <arg name="common_config" value="$(arg common_config)" />
+    <arg name="touch_config" value="$(arg touch_config)" />
+    <arg name="node_start_delay" value="$(arg node_start_delay)" />
+    <arg name="save_episode" value="$(arg save_episode)" />
+    <arg name="agent_name" value="$(arg agent_name)" />
+  </include>
 </launch>
