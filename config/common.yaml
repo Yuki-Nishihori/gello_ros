@@ -2,7 +2,6 @@
 default_hostname: "127.0.0.1"
 default_robot_port: 6001
 control_hz: 500
-dynamixel_baudrate: 2000000
 
 # camera config
 default_camera_port: 7001 # If there are multiple cameras, use consecutive numbers

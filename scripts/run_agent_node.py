@@ -97,7 +97,7 @@ def main():
     hostname: str = rospy.get_param("~default_hostname", "127.0.0.1")
     robot_port: int = rospy.get_param("~default_robot_port", 6001)
     camera_port: int = rospy.get_param("~default_camera_port", 7001)
-    camera_names: List[str] = rospy.get_param("~camera_names", ["base"])
+    camera_names: List[str] = rospy.get_param("~camera_names", None)
 
     robot_type: str = None  # only needed for quest agent or spacemouse agent
     hz: int = rospy.get_param("~control_hz", 100)
@@ -131,8 +131,8 @@ def main():
         camera_clients = {}
         global base_image
         global side_image
-        base_image = np.zeros((480, 640, 3), dtype=np.uint8)
-        side_image = np.zeros((480, 640, 3), dtype=np.uint8)
+        base_image = None
+        side_image = None
         start_camera_subscriber()
 
         if controller_type == "joint_trajectory_controller":
@@ -288,6 +288,8 @@ def main():
         policy.to(device)
         policy.eval()
         print("ACT policy loaded")
+        if camera_names is None:
+            raise ValueError("Camera names not provided")
         agent = ACTAgent(
             policy, camera_names, train_cfg, policy_config, task_cfg=cfg, device=device
         )

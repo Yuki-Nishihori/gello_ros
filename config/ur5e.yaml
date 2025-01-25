@@ -42,7 +42,7 @@ wrench_topic: "/wrench/filtered"
 gello_mode: "unilateral" # "unilateral" or "bilateral"
 use_gripper: False
 use_FT_sensor: True
-gello_port: "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FT8ISUQE-if00-port0"
+
 
 gello_start_joints:
   - !degrees  -90.0  # shoulder_pan_joint
@@ -52,14 +52,5 @@ gello_start_joints:
   - !degrees  90.0  # wrist_2_joint
   - !degrees  0.0  # wrist_3_joint
 
-stall_torque: 0.52
-stall_current: 1.5
-torque_rate:
-  - 0.003
-  - 0.003
-  - 0.003
-  - 0.003
-  - 0.003
-  - 0.003
-current_goal_constant: 0.001
+
 
