@@ -15,7 +15,13 @@
   <group if="$(eval arg('agent_name') == 'touch')">
     <node name="omni_state" pkg="omni_common" type="omni_state" output="screen">
       <rosparam command="load" file="$(arg touch_config)" />
-  </node>
+    </node>
+    <param name="touch_robot_description" command="cat $(find omni_description)/urdf/omni.urdf" />
+    <node name="touch_robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher">
+        <remap from="joint_states" to="touch/joint_states" />
+        <remap from="robot_description" to="touch_robot_description" />
+    </node>
+     <node pkg="tf2_ros" type="static_transform_publisher" name="static_transform_publisher" args="1 0.5 0 0 0 0 world touch_base" />
   </group>
 
   <node name="gello_agent" pkg="gello_ros" type="run_agent_node.py" output="screen"
