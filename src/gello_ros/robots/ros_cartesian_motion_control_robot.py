@@ -117,7 +117,7 @@ class CartesianMotionControlRobot(Robot):
 
     def get_observations(self) -> Dict[str, np.ndarray]:
         joints = self.get_joint_state()
-        pos_quat = np.zeros(7)
+        pos_quat = self.kinematics.forward(joints, tip_link=self.ee_link)
         gripper_pos = np.array([joints[-1]])
         wrench = np.array(
             [

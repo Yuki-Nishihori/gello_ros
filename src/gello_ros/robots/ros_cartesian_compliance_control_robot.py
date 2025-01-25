@@ -154,7 +154,7 @@ class CartesianComplianceControlRobot(Robot):
 
     def get_observations(self) -> Dict[str, np.ndarray]:
         joints = self.get_joint_state()
-        pos_quat = np.zeros(7)
+        pos_quat = self.kinematics.forward(joints, tip_link=self.ee_link)
         gripper_pos = np.array([joints[-1]])
         wrench = np.array(
             [
@@ -170,8 +170,8 @@ class CartesianComplianceControlRobot(Robot):
         return {
             "joint_positions": joints,
             "joint_velocities": joints,
-            "ee_pos_quat": pos_quat,
             "gripper_position": gripper_pos,
+            "ee_pos_quat": pos_quat,
             "ee_wrench": wrench,
             "jacobian": jacobian,
         }
