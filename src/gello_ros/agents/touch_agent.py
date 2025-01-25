@@ -98,7 +98,6 @@ class TouchAgent(Agent):
         if self._prev_button == 0 and self._button == 1:
             self._robot_start_pose = obs["ee_pos_quat"]
             self._touch_start_pose = self._touch_current_pose
-            print("Current robot pose: ", obs["ee_pos_quat"])
         self._prev_button = self._button
         if self._button == 1:   
             return (self._touch_current_pose - self._touch_start_pose)  + self._robot_start_pose
