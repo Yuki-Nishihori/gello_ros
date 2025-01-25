@@ -8,12 +8,13 @@ from gello_ros.agents.agent import Agent
 from gello_ros.robots.dynamixel import DynamixelRobot
 import time
 
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, WrenchStamped
 from omni_msgs.msg import OmniButtonEvent
 import rospy
 import moveit_commander
 import tf.transformations
-
+import tf2_ros
+import tf2_geometry_msgs
 
 
 class TouchAgent(Agent):
@@ -22,9 +23,16 @@ class TouchAgent(Agent):
     ):
         ee_pose_topic = rospy.get_param("~touch_ee_pose_topic")
         button_topic = rospy.get_param("~touch_button_topic")
+        force_feedback_topic = rospy.get_param("~touch_force_feedback_topic", "debug_force")
         self._touch_current_pose = None
         self._touch_start_pose = None
         self._robot_start_pose = None
+        self.mode = rospy.get_param("~communication_mode", "unilateral")
+
+        # Publisher for force feedback
+        self.force_feedback_pub = rospy.Publisher(
+            force_feedback_topic, WrenchStamped, queue_size=10
+        )
 
         # Subscriber for pose topic
         self.pose_sub = rospy.Subscriber(
@@ -33,6 +41,9 @@ class TouchAgent(Agent):
         self.button_sub = rospy.Subscriber(
             button_topic, OmniButtonEvent, self.button_callback
         )
+        # self._force_transform_sub = rospy.Subscriber(
+        #     "force_transform", WrenchStamped, self.force_transform_callback
+        # )
         self._button = 0
         self._prev_button = 0
 
@@ -43,6 +54,10 @@ class TouchAgent(Agent):
                 rospy.logerr(f"Timeout waiting for {ee_pose_topic} topic. Exiting.")
                 exit()
             rospy.sleep(0.1)
+
+        # Initialize tf2 buffer and listener
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
 
     def pose_callback(self, msg):
         pose_array = np.zeros(7)
@@ -58,18 +73,54 @@ class TouchAgent(Agent):
     def button_callback(self, msg):
         self._button = msg.white_button      
 
+    def transform_wrench(self, wrench_in_tool, transform):
+        force_in_tool = np.array([wrench_in_tool.wrench.force.x,
+                                  wrench_in_tool.wrench.force.y,
+                                  wrench_in_tool.wrench.force.z])
+        torque_in_tool = np.array([wrench_in_tool.wrench.torque.x,
+                                   wrench_in_tool.wrench.torque.y,
+                                   wrench_in_tool.wrench.torque.z])
+
+        rotation = tf.transformations.quaternion_matrix([
+            transform.transform.rotation.x,
+            transform.transform.rotation.y,
+            transform.transform.rotation.z,
+            transform.transform.rotation.w
+        ])[:3, :3]
+
+        force_in_base = np.dot(rotation, force_in_tool)
+        tool_offset = np.array([transform.transform.translation.x,
+                                transform.transform.translation.y,
+                                transform.transform.translation.z])
+        torque_in_base = np.dot(rotation, torque_in_tool) + np.cross(tool_offset, force_in_base)
+
+        wrench_in_base = WrenchStamped()
+        wrench_in_base.wrench.force.x = force_in_base[0]
+        wrench_in_base.wrench.force.y = force_in_base[1]
+        wrench_in_base.wrench.force.z = force_in_base[2]
+        wrench_in_base.wrench.torque.x = torque_in_base[0]
+        wrench_in_base.wrench.torque.y = torque_in_base[1]
+        wrench_in_base.wrench.torque.z = torque_in_base[2]
+
+        return wrench_in_base
+
     def act(self, obs: Dict[str, np.ndarray]) -> np.ndarray:
         # if self.mode == "bilateral":
-        #     jacobian_inv = np.linalg.pinv(obs["jacobian"])
-        #     wrench = obs["ee_wrench"]
-        #     wrench[2] *= -1
-        #     joint_torques = np.dot(jacobian_inv, wrench)
-        #     joint_currents = joint_torques / self.torque_constant
-        #     dynamixel_current_goals = joint_currents / self.current_goal_constant
-        #     dynamixel_current_goals = np.round(
-        #         dynamixel_current_goals * self.torque_rate
-        #     ).astype(int)
-        #     self._robot.command_joint_torque(dynamixel_current_goals)
+        try:
+            transform = self.tf_buffer.lookup_transform("base", "tool0", rospy.Time(0), rospy.Duration(1.0))
+            wrench_in_tool = WrenchStamped()
+            wrench_in_tool.wrench.force.x = obs["ee_wrench"][0]
+            wrench_in_tool.wrench.force.y = obs["ee_wrench"][1]
+            wrench_in_tool.wrench.force.z = obs["ee_wrench"][2]
+            wrench_in_tool.wrench.torque.x = obs["ee_wrench"][3]
+            wrench_in_tool.wrench.torque.y = obs["ee_wrench"][4]
+            wrench_in_tool.wrench.torque.z = obs["ee_wrench"][5]
+            wrench_in_base = self.transform_wrench(wrench_in_tool, transform)
+            print(wrench_in_base)
+            self.force_feedback_pub.publish(wrench_in_base)
+            
+        except tf2_ros.TransformException as ex:
+            rospy.logwarn(f"TransformException: {ex}")
 
         if self._prev_button == 0 and self._button == 1:
             self._robot_start_pose = obs["ee_pos_quat"]
