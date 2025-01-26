@@ -27,7 +27,12 @@ class TouchAgent(Agent):
         self._touch_current_pose = None
         self._touch_start_pose = None
         self._robot_start_pose = None
-        self.mode = rospy.get_param("~communication_mode", "unilateral")
+        self.teleop_mode = rospy.get_param("~teleoperation_mode", "unilateral")
+        if self.teleop_mode not in ["unilateral", "bilateral"]:
+            rospy.logerr(f"Invalid communication mode: {self.mode}. Exiting.")
+            exit()
+        else:
+            rospy.loginfo(f"Using {self.teleop_mode} teleoperation mode.")
 
         # Publisher for force feedback
         self.force_feedback_pub = rospy.Publisher(
@@ -44,8 +49,9 @@ class TouchAgent(Agent):
         # self._force_transform_sub = rospy.Subscriber(
         #     "force_transform", WrenchStamped, self.force_transform_callback
         # )
-        self._button = 0
-        self._prev_button = 0
+        self._white_button = 0
+        self._prev_white_button = 0
+        self._grey_button = 0
 
         # Wait for pose topic
         start_time = time.time()
@@ -71,9 +77,18 @@ class TouchAgent(Agent):
         self._touch_current_pose = pose_array
     
     def button_callback(self, msg):
-        self._button = msg.white_button      
+        self._white_button = msg.white_button
+        self._grey_button = msg.grey_button
 
-    def transform_wrench(self, wrench_in_tool, transform):
+    def transform_wrench(self, wrench_array, transform):
+
+        wrench_in_tool = WrenchStamped()
+        wrench_in_tool.wrench.force.x = wrench_array[0]
+        wrench_in_tool.wrench.force.y = wrench_array[1]
+        wrench_in_tool.wrench.force.z = wrench_array[2]
+        wrench_in_tool.wrench.torque.x = wrench_array[3]
+        wrench_in_tool.wrench.torque.y = wrench_array[4]
+        wrench_in_tool.wrench.torque.z = wrench_array[5]
         force_in_tool = np.array([wrench_in_tool.wrench.force.x,
                                   wrench_in_tool.wrench.force.y,
                                   wrench_in_tool.wrench.force.z])
@@ -128,28 +143,26 @@ class TouchAgent(Agent):
         return np.concatenate((robot_start_pose[:3] + pos_diff, new_quat))
 
     def act(self, obs: Dict[str, np.ndarray]) -> np.ndarray:
-        if self.mode == "bilateral":
+        if self.teleop_mode == "bilateral":
             try:
                 transform = self.tf_buffer.lookup_transform("base", "tool0", rospy.Time(0), rospy.Duration(1.0))
-                wrench_in_tool = WrenchStamped()
-                wrench_in_tool.wrench.force.x = obs["ee_wrench"][0]
-                wrench_in_tool.wrench.force.y = obs["ee_wrench"][1]
-                wrench_in_tool.wrench.force.z = obs["ee_wrench"][2]
-                wrench_in_tool.wrench.torque.x = obs["ee_wrench"][3]
-                wrench_in_tool.wrench.torque.y = obs["ee_wrench"][4]
-                wrench_in_tool.wrench.torque.z = obs["ee_wrench"][5]
-                wrench_in_base = self.transform_wrench(wrench_in_tool, transform)
+                wrench_in_base = self.transform_wrench(obs["ee_wrench"], transform)
                 self.force_feedback_pub.publish(wrench_in_base)
             except tf2_ros.TransformException as ex:
                 rospy.logwarn(f"TransformException: {ex}")
                 return obs["ee_pos_quat"]
-
-        if self._prev_button == 0 and self._button == 1:
+        if self._prev_white_button == 0 and self._white_button == 1:
             self._robot_start_pose = obs["ee_pos_quat"]
             self._touch_start_pose = self._touch_current_pose
-        self._prev_button = self._button
-
-        if self._button == 1:
+        self._prev_white_button = self._white_button
+        if self._white_button == 1 and self._grey_button == 1:
+            vertical_pose = obs["ee_pos_quat"]
+            vertical_pose[3] = 1
+            vertical_pose[4] = 0
+            vertical_pose[5] = 0
+            vertical_pose[5] = 0
+            return vertical_pose
+        elif self._white_button == 1:
             return self.calculate_pose_difference(self._touch_start_pose, self._touch_current_pose, self._robot_start_pose)
         else:
             return obs["ee_pos_quat"]
