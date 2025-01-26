@@ -29,6 +29,7 @@ class TouchAgent(Agent):
         self._touch_current_pose = None
         self._touch_start_pose = None
         self._robot_start_pose = None
+        self._robot_current_pose = None
         self.z_down_quat = tf.transformations.quaternion_from_euler(0, np.pi, 0) 
         self.teleop_mode = rospy.get_param("~teleoperation_mode", "unilateral")
         if self.teleop_mode not in ["unilateral", "bilateral"]:
@@ -163,19 +164,29 @@ class TouchAgent(Agent):
         return np.concatenate((robot_start_pose[:3] + pos_diff, new_quat))
 
     def act(self, obs: Dict[str, np.ndarray]) -> np.ndarray:
+
+        # Calculate the force feedback in the base frame (see calculated wrench in RViz)
         try:
             transform = self.tf_buffer.lookup_transform("base", "tool0", rospy.Time(0), rospy.Duration(1.0))
             wrench_in_base_vis,wrench_in_base = self.transform_wrench(obs["ee_wrench"], transform)
             self.force_feedback_vis_pub.publish(wrench_in_base_vis)
         except tf2_ros.TransformException as ex:
             rospy.logwarn(f"TransformException: {ex}")
-            return obs["ee_pos_quat"]
+        
+        # Publish the force feedback
         if self.teleop_mode == "bilateral":
             self.force_feedback_pub.publish(wrench_in_base)
+        
+        # Keep track of the start pose when the white button is pressed
         if self._prev_white_button == 0 and self._white_button == 1:
             self._robot_start_pose = obs["ee_pos_quat"]
             self._touch_start_pose = self._touch_current_pose
+        elif self._prev_white_button == 1 and self._white_button == 0:
+            self._robot_current_pose = obs["ee_pos_quat"] 
+            print("Robot current pose: ", self._robot_current_pose)
         self._prev_white_button = self._white_button
+        
+        # Return the pose
         if self._white_button == 1 and self._grey_button == 1:
             vertical_pose = self.calculate_pose_difference(self._touch_start_pose, self._touch_current_pose, self._robot_start_pose)
             vertical_pose[3:] = self.z_down_quat
@@ -183,5 +194,6 @@ class TouchAgent(Agent):
         elif self._white_button == 1:
             return self.calculate_pose_difference(self._touch_start_pose, self._touch_current_pose, self._robot_start_pose)
         else:
-            print(obs["ee_pos_quat"])
-            return obs["ee_pos_quat"]
+            if self._robot_current_pose is None:
+                self._robot_current_pose = obs["ee_pos_quat"]
+            return self._robot_current_pose
