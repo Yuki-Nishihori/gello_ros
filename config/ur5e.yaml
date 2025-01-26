@@ -37,12 +37,6 @@ cartesian_compliance_controller_command_topic: "/target_frame"
 cartesian_motion_controller_command_topic: "/target_frame"
 ee_link: "pestle_tip"
 joint_states_topic: "/joint_states"
-controller_type: "cartesian_compliance_controller" # "joint_trajectory_controller" or "cartesian_compliance_controller"
-wrench_topic: "/wrench/filtered"
-teleoperation_mode: "bilateral" # "unilateral" or "bilateral"
-use_gripper: False
-use_FT_sensor: True
-
 
 gello_start_joints:
   - !degrees  -90.0  # shoulder_pan_joint
