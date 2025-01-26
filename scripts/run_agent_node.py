@@ -93,7 +93,7 @@ def save_episode_thread(episode_number, obs_replay, action_replay):
 def main():
     rospy.init_node("agent_node", anonymous=True)
 
-    agent_name: str = rospy.get_param("~agent_name", "gello")
+    agent_type: str = rospy.get_param("~agent_type", "gello")
     hostname: str = rospy.get_param("~default_hostname", "127.0.0.1")
     robot_port: int = rospy.get_param("~default_robot_port", 6001)
     camera_port: int = rospy.get_param("~default_camera_port", 7001)
@@ -162,7 +162,7 @@ def main():
             )
     
 
-    if agent_name == "gello":
+    if agent_type == "gello":
         env = RobotEnv(robot, control_rate_hz=hz, camera_dict=camera_clients,control_mode="joint")
         print("Using Gello agent")
         gello_port = gello_port
@@ -258,7 +258,7 @@ def main():
                     f"Joint [{j}], leader: {action[j]}, follower: {joints[j]}, diff: {action[j] - joints[j]}"
                 )
             exit()
-    if agent_name == "touch":
+    if agent_type == "touch":
         env = RobotEnv(robot, control_rate_hz=hz, camera_dict=camera_clients,control_mode="pose")
         print("Using 3D Systems Touch agent")
         # Initialize obs
@@ -266,10 +266,10 @@ def main():
         obs["base_rgb"] = base_image
         obs["side_rgb"] = side_image
         agent = TouchAgent()
-    elif agent_name == "dummy" or agent_name == "none":
+    elif agent_type == "dummy" or agent_type == "none":
         env = RobotEnv(robot, control_rate_hz=hz, camera_dict=camera_clients,control_mode="joint")
         agent = DummyAgent(num_dofs=robot_client.num_dofs())
-    elif agent_name == "act":
+    elif agent_type == "act":
         env = RobotEnv(robot, control_rate_hz=hz, camera_dict=camera_clients,control_mode="joint")
         # load config
         cfg = TASK_CONFIG
@@ -296,7 +296,7 @@ def main():
         obs = env.get_obs()
         obs["base_rgb"] = base_image
         obs["side_rgb"] = side_image
-    elif agent_name == "policy":
+    elif agent_type == "policy":
         raise NotImplementedError("add your imitation policy here if there is one")
     else:
         raise ValueError("Invalid agent name")
@@ -361,7 +361,7 @@ def main():
                     break
                 else:
                     raise ValueError(f"Invalid state {button_state}")
-            elif agent_name == "act":
+            elif agent_type == "act":
                 for t in range(number_of_steps):
                     time_passed = time.time() - start_time
                     step_st = time.time()

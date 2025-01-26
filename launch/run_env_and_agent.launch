@@ -4,7 +4,7 @@
   <arg name="touch_config" default="$(find gello_ros)/config/touch.yaml" />
   <arg name="node_start_delay" default="10.0" />
   <arg name="save_episode" default="false" />
-  <arg name="agent_name" default="touch" />
+  <arg name="agent_type" default="touch" />
   <arg name="camera_type" default="realsense" />
 
   <group if="$(eval arg('camera_type') == 'realsense')">
@@ -24,6 +24,6 @@
     <arg name="touch_config" value="$(arg touch_config)" />
     <arg name="node_start_delay" value="$(arg node_start_delay)" />
     <arg name="save_episode" value="$(arg save_episode)" />
-    <arg name="agent_name" value="$(arg agent_name)" />
+    <arg name="agent_type" value="$(arg agent_type)" />
   </include>
 </launch>
