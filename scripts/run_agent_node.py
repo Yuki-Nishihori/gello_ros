@@ -299,7 +299,7 @@ def main():
     elif agent_type == "policy":
         raise NotImplementedError("add your imitation policy here if there is one")
     else:
-        raise ValueError("Invalid agent name")
+        raise ValueError("Invalid agent type: %s" % agent_type)
 
     print_color("\nStart 🚀🚀🚀", color="green", attrs=("bold",))
     start_time = time.time()
