@@ -104,29 +104,52 @@ class TouchAgent(Agent):
 
         return wrench_in_base
 
+    def calculate_pose_difference(self, start_pose, current_pose, robot_start_pose):
+        pos_diff = current_pose[:3] - start_pose[:3]
+        start_quat = start_pose[3:]
+        current_quat = current_pose[3:]
+
+        # Convert quaternions to rotation matrices
+        start_rot = tf.transformations.quaternion_matrix(start_quat)[:3, :3]
+        current_rot = tf.transformations.quaternion_matrix(current_quat)[:3, :3]
+
+        # Calculate the relative rotation
+        relative_rot = np.dot(current_rot, np.linalg.inv(start_rot))
+
+        # Convert the relative rotation back to a quaternion
+        relative_quat = tf.transformations.quaternion_from_matrix(np.vstack((np.hstack((relative_rot, [[0], [0], [0]])), [0, 0, 0, 1])))
+
+        # Apply the relative rotation to the robot start pose quaternion
+        robot_start_quat = robot_start_pose[3:]
+        robot_start_rot = tf.transformations.quaternion_matrix(robot_start_quat)[:3, :3]
+        new_rot = np.dot(relative_rot, robot_start_rot)
+        new_quat = tf.transformations.quaternion_from_matrix(np.vstack((np.hstack((new_rot, [[0], [0], [0]])), [0, 0, 0, 1])))
+
+        return np.concatenate((robot_start_pose[:3] + pos_diff, new_quat))
+
     def act(self, obs: Dict[str, np.ndarray]) -> np.ndarray:
-        # if self.mode == "bilateral":
-        try:
-            transform = self.tf_buffer.lookup_transform("base", "tool0", rospy.Time(0), rospy.Duration(1.0))
-            wrench_in_tool = WrenchStamped()
-            wrench_in_tool.wrench.force.x = obs["ee_wrench"][0]
-            wrench_in_tool.wrench.force.y = obs["ee_wrench"][1]
-            wrench_in_tool.wrench.force.z = obs["ee_wrench"][2]
-            wrench_in_tool.wrench.torque.x = obs["ee_wrench"][3]
-            wrench_in_tool.wrench.torque.y = obs["ee_wrench"][4]
-            wrench_in_tool.wrench.torque.z = obs["ee_wrench"][5]
-            wrench_in_base = self.transform_wrench(wrench_in_tool, transform)
-            print(wrench_in_base)
-            self.force_feedback_pub.publish(wrench_in_base)
-            
-        except tf2_ros.TransformException as ex:
-            rospy.logwarn(f"TransformException: {ex}")
+        if self.mode == "bilateral":
+            try:
+                transform = self.tf_buffer.lookup_transform("base", "tool0", rospy.Time(0), rospy.Duration(1.0))
+                wrench_in_tool = WrenchStamped()
+                wrench_in_tool.wrench.force.x = obs["ee_wrench"][0]
+                wrench_in_tool.wrench.force.y = obs["ee_wrench"][1]
+                wrench_in_tool.wrench.force.z = obs["ee_wrench"][2]
+                wrench_in_tool.wrench.torque.x = obs["ee_wrench"][3]
+                wrench_in_tool.wrench.torque.y = obs["ee_wrench"][4]
+                wrench_in_tool.wrench.torque.z = obs["ee_wrench"][5]
+                wrench_in_base = self.transform_wrench(wrench_in_tool, transform)
+                self.force_feedback_pub.publish(wrench_in_base)
+            except tf2_ros.TransformException as ex:
+                rospy.logwarn(f"TransformException: {ex}")
+                return obs["ee_pos_quat"]
 
         if self._prev_button == 0 and self._button == 1:
             self._robot_start_pose = obs["ee_pos_quat"]
             self._touch_start_pose = self._touch_current_pose
         self._prev_button = self._button
-        if self._button == 1:   
-            return (self._touch_current_pose - self._touch_start_pose)  + self._robot_start_pose
+
+        if self._button == 1:
+            return self.calculate_pose_difference(self._touch_start_pose, self._touch_current_pose, self._robot_start_pose)
         else:
             return obs["ee_pos_quat"]
