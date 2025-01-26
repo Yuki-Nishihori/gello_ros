@@ -21,7 +21,7 @@
         <remap from="joint_states" to="touch/joint_states" />
         <remap from="robot_description" to="touch_robot_description" />
     </node>
-     <node pkg="tf2_ros" type="static_transform_publisher" name="static_transform_publisher" args="1 0.5 0 0 0 0 world touch_base" />
+     <node pkg="tf2_ros" type="static_transform_publisher" name="static_transform_publisher" args="1 0.5 0 0 0 0 world touch_base" launch-prefix="bash -c 'sleep $(arg node_start_delay); $0 $@' "/>
   </group>
 
   <node name="gello_agent" pkg="gello_ros" type="run_agent_node.py" output="screen"
