@@ -1,0 +1,24 @@
+<launch>
+  <arg name="gello_config" default="$(find gello_ros)/config/gello.yaml" />
+  <arg name="touch_config" default="$(find gello_ros)/config/touch.yaml" />
+  <arg name="node_start_delay" default="2.0" />
+  <arg name="device_type" default="touch" />
+
+  <group if="$(eval arg('device_type') == 'gello')">
+    <node name="run_gello" pkg="gello_ros" type="run_gello.py" output="screen">
+      <rosparam command="load" file="$(arg gello_config)" />
+    </node>
+  </group>
+  <group if="$(eval arg('device_type') == 'touch')">
+    <node name="omni_state" pkg="omni_common" type="omni_state" output="screen">
+      <rosparam command="load" file="$(arg touch_config)" />
+    </node>
+    <param name="touch_robot_description" command="cat $(find omni_description)/urdf/omni.urdf" />
+    <node name="touch_robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher">
+        <remap from="joint_states" to="touch/joint_states" />
+        <remap from="robot_description" to="touch_robot_description" />
+    </node>
+     <node pkg="tf2_ros" type="static_transform_publisher" name="static_transform_publisher" args="1 0.5 0 0 0 0 world touch_base" launch-prefix="bash -c 'sleep $(arg node_start_delay); $0 $@' "/>
+  </group>
+
+</launch>
