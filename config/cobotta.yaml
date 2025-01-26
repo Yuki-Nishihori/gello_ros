@@ -38,7 +38,7 @@ ee_link: "pestle_tip"
 joint_states_topic: "/joint_states"
 controller_type: "joint_trajectory_controller" # "joint_trajectory_controller" or "cartesian_compliance_controller"
 wrench_topic: "/wrench/filtered"
-communication_mode: "unilateral" # "unilateral" or "bilateral"
+teleoperation_mode: "unilateral" # "unilateral" or "bilateral"
 use_gripper: True
 use_FT_sensor: False
 gello_port: "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FT88YXAT-if00-port0"
