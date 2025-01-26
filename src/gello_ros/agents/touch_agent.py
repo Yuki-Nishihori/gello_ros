@@ -9,7 +9,7 @@ from gello_ros.robots.dynamixel import DynamixelRobot
 import time
 
 from geometry_msgs.msg import PoseStamped, WrenchStamped
-from omni_msgs.msg import OmniButtonEvent
+from omni_msgs.msg import OmniButtonEvent, OmniFeedback
 import rospy
 import moveit_commander
 import tf.transformations
@@ -23,7 +23,9 @@ class TouchAgent(Agent):
     ):
         ee_pose_topic = rospy.get_param("~touch_ee_pose_topic")
         button_topic = rospy.get_param("~touch_button_topic")
-        force_feedback_topic = rospy.get_param("~touch_force_feedback_topic", "debug_force")
+        force_feedback_topic = rospy.get_param("~touch_force_feedback_topic", "force_feedback")
+        self.max_force = rospy.get_param("~max_force", 1.5)
+        self.force_scale = rospy.get_param("~force_scale", 1.0)
         self._touch_current_pose = None
         self._touch_start_pose = None
         self._robot_start_pose = None
@@ -36,9 +38,13 @@ class TouchAgent(Agent):
             rospy.loginfo(f"Using {self.teleop_mode} teleoperation mode.")
 
         # Publisher for force feedback
-        self.force_feedback_pub = rospy.Publisher(
-            force_feedback_topic, WrenchStamped, queue_size=10
+        self.force_feedback_vis_pub = rospy.Publisher(
+            "force_feedback_vis", WrenchStamped, queue_size=10
         )
+        self.force_feedback_pub = rospy.Publisher(
+            force_feedback_topic, OmniFeedback, queue_size=10
+        )
+        
 
         # Subscriber for pose topic
         self.pose_sub = rospy.Subscriber(
@@ -82,6 +88,13 @@ class TouchAgent(Agent):
         self._grey_button = msg.grey_button
 
     def transform_wrench(self, wrench_array, transform):
+        # Apply scaling to the force and torque
+        wrench_array[:3] *= self.force_scale
+        wrench_array[3:] *= self.force_scale
+
+        # Apply max force limit
+        wrench_array[:3] = np.clip(wrench_array[:3], -self.max_force, self.max_force)
+        wrench_array[3:] = np.clip(wrench_array[3:], -self.max_force, self.max_force)
 
         wrench_in_tool = WrenchStamped()
         wrench_in_tool.wrench.force.x = wrench_array[0]
@@ -110,15 +123,21 @@ class TouchAgent(Agent):
                                 transform.transform.translation.z])
         torque_in_base = np.dot(rotation, torque_in_tool) + np.cross(tool_offset, force_in_base)
 
-        wrench_in_base = WrenchStamped()
-        wrench_in_base.wrench.force.x = force_in_base[0]
-        wrench_in_base.wrench.force.y = force_in_base[1]
-        wrench_in_base.wrench.force.z = force_in_base[2]
-        wrench_in_base.wrench.torque.x = torque_in_base[0]
-        wrench_in_base.wrench.torque.y = torque_in_base[1]
-        wrench_in_base.wrench.torque.z = torque_in_base[2]
+        wrench_in_base_vis = WrenchStamped()
+        wrench_in_base_vis.header.frame_id = "touch_force"
+        wrench_in_base_vis.wrench.force.x = force_in_base[0]
+        wrench_in_base_vis.wrench.force.y = force_in_base[1]
+        wrench_in_base_vis.wrench.force.z = force_in_base[2]
+        wrench_in_base_vis.wrench.torque.x = torque_in_base[0]
+        wrench_in_base_vis.wrench.torque.y = torque_in_base[1]
+        wrench_in_base_vis.wrench.torque.z = torque_in_base[2]
 
-        return wrench_in_base
+        wrench_in_base = OmniFeedback()
+        wrench_in_base.force.x = force_in_base[0]
+        wrench_in_base.force.y = force_in_base[1]
+        wrench_in_base.force.z = force_in_base[2]
+
+        return wrench_in_base_vis, wrench_in_base
 
     def calculate_pose_difference(self, start_pose, current_pose, robot_start_pose):
         pos_diff = current_pose[:3] - start_pose[:3]
@@ -144,14 +163,15 @@ class TouchAgent(Agent):
         return np.concatenate((robot_start_pose[:3] + pos_diff, new_quat))
 
     def act(self, obs: Dict[str, np.ndarray]) -> np.ndarray:
+        try:
+            transform = self.tf_buffer.lookup_transform("base", "tool0", rospy.Time(0), rospy.Duration(1.0))
+            wrench_in_base_vis,wrench_in_base = self.transform_wrench(obs["ee_wrench"], transform)
+            self.force_feedback_vis_pub.publish(wrench_in_base_vis)
+        except tf2_ros.TransformException as ex:
+            rospy.logwarn(f"TransformException: {ex}")
+            return obs["ee_pos_quat"]
         if self.teleop_mode == "bilateral":
-            try:
-                transform = self.tf_buffer.lookup_transform("base", "tool0", rospy.Time(0), rospy.Duration(1.0))
-                wrench_in_base = self.transform_wrench(obs["ee_wrench"], transform)
-                self.force_feedback_pub.publish(wrench_in_base)
-            except tf2_ros.TransformException as ex:
-                rospy.logwarn(f"TransformException: {ex}")
-                return obs["ee_pos_quat"]
+            self.force_feedback_pub.publish(wrench_in_base)
         if self._prev_white_button == 0 and self._white_button == 1:
             self._robot_start_pose = obs["ee_pos_quat"]
             self._touch_start_pose = self._touch_current_pose
@@ -163,4 +183,5 @@ class TouchAgent(Agent):
         elif self._white_button == 1:
             return self.calculate_pose_difference(self._touch_start_pose, self._touch_current_pose, self._robot_start_pose)
         else:
+            print(obs["ee_pos_quat"])
             return obs["ee_pos_quat"]
