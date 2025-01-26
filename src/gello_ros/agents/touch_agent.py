@@ -27,6 +27,7 @@ class TouchAgent(Agent):
         self._touch_current_pose = None
         self._touch_start_pose = None
         self._robot_start_pose = None
+        self.z_down_quat = tf.transformations.quaternion_from_euler(0, np.pi, 0) 
         self.teleop_mode = rospy.get_param("~teleoperation_mode", "unilateral")
         if self.teleop_mode not in ["unilateral", "bilateral"]:
             rospy.logerr(f"Invalid communication mode: {self.mode}. Exiting.")
@@ -156,11 +157,8 @@ class TouchAgent(Agent):
             self._touch_start_pose = self._touch_current_pose
         self._prev_white_button = self._white_button
         if self._white_button == 1 and self._grey_button == 1:
-            vertical_pose = obs["ee_pos_quat"]
-            vertical_pose[3] = 1
-            vertical_pose[4] = 0
-            vertical_pose[5] = 0
-            vertical_pose[5] = 0
+            vertical_pose = self.calculate_pose_difference(self._touch_start_pose, self._touch_current_pose, self._robot_start_pose)
+            vertical_pose[3:] = self.z_down_quat
             return vertical_pose
         elif self._white_button == 1:
             return self.calculate_pose_difference(self._touch_start_pose, self._touch_current_pose, self._robot_start_pose)
