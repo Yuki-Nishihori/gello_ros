@@ -24,8 +24,8 @@ class TouchAgent(Agent):
         ee_pose_topic = rospy.get_param("~touch_ee_pose_topic")
         button_topic = rospy.get_param("~touch_button_topic")
         force_feedback_topic = rospy.get_param("~touch_force_feedback_topic", "force_feedback")
-        self.max_force = rospy.get_param("~max_force", 1.5)
-        self.force_scale = rospy.get_param("~force_scale", 1.0)
+        self.touch_max_force = rospy.get_param("~touch_max_force", 1.5)
+        self.force_scale_to_touch = rospy.get_param("~force_scale_to_touch", 1.0)
         self._touch_current_pose = None
         self._touch_start_pose = None
         self._robot_start_pose = None
@@ -90,12 +90,12 @@ class TouchAgent(Agent):
 
     def transform_wrench(self, wrench_array, transform):
         # Apply scaling to the force and torque
-        wrench_array[:3] *= self.force_scale
-        wrench_array[3:] *= self.force_scale
+        wrench_array[:3] *= self.force_scale_to_touch
+        wrench_array[3:] *= self.force_scale_to_touch
 
         # Apply max force limit
-        wrench_array[:3] = np.clip(wrench_array[:3], -self.max_force, self.max_force)
-        wrench_array[3:] = np.clip(wrench_array[3:], -self.max_force, self.max_force)
+        wrench_array[:3] = np.clip(wrench_array[:3], -self.touch_max_force, self.touch_max_force)
+        wrench_array[3:] = np.clip(wrench_array[3:], -self.touch_max_force, self.touch_max_force)
 
         wrench_in_tool = WrenchStamped()
         wrench_in_tool.wrench.force.x = wrench_array[0]
