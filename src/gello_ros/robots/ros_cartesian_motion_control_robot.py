@@ -45,7 +45,7 @@ class CartesianMotionControlRobot(Robot):
             self.joint_states_callback,
         )
         rospy.Subscriber(
-            rospy.get_param("~wrench_topic"),
+            rospy.get_param("~feedback_wrench_topic"),
             WrenchStamped,
             self.wrench_callback,
         )

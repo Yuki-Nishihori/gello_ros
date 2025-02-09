@@ -6,7 +6,9 @@ touch_ee_pose_topic:  "/touch/tip_pose"
 touch_button_topic: "/touch/button"
 touch_force_feedback_topic: "/touch/force_feedback"
 controller_type: "cartesian_compliance_controller" # "joint_trajectory_controller" or "cartesian_compliance_controller"
-wrench_topic: "/leptrino/wrench/filtered"
+compliance_control_wrench_zero_service: "/wrench/filtered/zero_ftsensor"
+feedback_wrench_topic: "/leptrino/wrench/filtered"
+feedback_wrench_zero_service: "/leptrino/wrench/filtered/zero_ftsensor"
 teleoperation_mode: "bilateral" # "unilateral" or "bilateral"
 use_gripper: False
 use_FT_sensor: True

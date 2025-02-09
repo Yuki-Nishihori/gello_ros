@@ -44,7 +44,7 @@ class JointTrajectoryControlRobot(Robot):
         )
         if use_FT_sensor:
             rospy.Subscriber(
-                rospy.get_param("~wrench_topic"),
+                rospy.get_param("~feedback_feedback_wrench_topic"),
                 WrenchStamped,
                 self.wrench_callback,
             )

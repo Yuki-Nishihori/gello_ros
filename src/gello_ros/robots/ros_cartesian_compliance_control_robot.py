@@ -8,7 +8,7 @@ import rospy
 from moveit_commander import MoveGroupCommander
 from sensor_msgs.msg import JointState
 from geometry_msgs.msg import PoseStamped, WrenchStamped
-
+from std_srvs.srv import Empty
 
 from ur_pykdl import ur_kinematics
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
@@ -55,9 +55,9 @@ class CartesianComplianceControlRobot(Robot):
                 exit()
             rospy.sleep(0.1)
 
-        # Wait for wrench_topic
+        # Wait for feedback_wrench_topic
         rospy.Subscriber(
-            rospy.get_param("~wrench_topic"),
+            rospy.get_param("~feedback_wrench_topic"),
             WrenchStamped,
             self.wrench_callback,
         )
@@ -65,9 +65,34 @@ class CartesianComplianceControlRobot(Robot):
         start_time = time.time()
         while self._wrench is None:
             if time.time() - start_time > 5:
-                rospy.logerr(f"Timeout waiting for wrench_topic. Exiting.")
+                rospy.logerr(f"Timeout waiting for feedback_wrench_topic. Exiting.")
                 exit()
             rospy.sleep(0.1)
+        
+        # Zero reset compliance control FT sensor offset
+        wrench_zero_service_name = rospy.get_param("~compliance_control_wrench_zero_service")
+        rospy.wait_for_service(wrench_zero_service_name)
+        try:
+            self.cotroller_wrench_zero_service = rospy.ServiceProxy(wrench_zero_service_name, Empty)
+        except rospy.ServiceException as e:
+            rospy.logerr(f"Service call failed: {e}")
+            exit()
+        rospy.loginfo("Zero reset compliance control FT sensor offset")
+        self.cotroller_wrench_zero_service.call()
+        rospy.sleep(1)
+
+        # Zero reset feedback FT sensor offset
+        wrench_zero_service_name = rospy.get_param("~feedback_wrench_zero_service")
+        rospy.wait_for_service(wrench_zero_service_name)
+        try:
+            self.cotroller_wrench_zero_service = rospy.ServiceProxy(wrench_zero_service_name, Empty)
+        except rospy.ServiceException as e:
+            rospy.logerr(f"Service call failed: {e}")
+            exit()
+        rospy.loginfo("Zero reset feedback FT sensor offset")
+        self.cotroller_wrench_zero_service.call()
+        rospy.sleep(1)
+
 
         self.move_group = MoveGroupCommander(
             rospy.get_param("move_group_name", "manipulator")
