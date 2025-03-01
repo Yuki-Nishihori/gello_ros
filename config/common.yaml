@@ -18,7 +18,7 @@ force_scale_to_touch: 0.8
 
 # camera config
 default_camera_port: 7001 # If there are multiple cameras, use consecutive numbers
-camera_names: ["base", "side"]
+camera_names: ["bottom"] # "base" or "side" or "bottom"
 camera_width: 640
 camera_height: 480
 camera_fps: 60
