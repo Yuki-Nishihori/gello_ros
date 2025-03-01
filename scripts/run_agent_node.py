@@ -5,6 +5,7 @@ import sys
 import glob
 import time
 from typing import List
+from functools import partial
 
 import numpy as np
 from policy_config import (
@@ -39,40 +40,26 @@ def print_color(*args, color=None, attrs=(), **kwargs):
     print(*args, **kwargs)
 
 
-def _color_callback_base(msg: Image):
+camera_images = {}
+
+def _camera_color_callback(camera_name, msg: Image):
     """Callback for the color image."""
-    global base_image
+    global camera_images
     bridge = CvBridge()
     try:
-        base_image = bridge.imgmsg_to_cv2(msg, "rgb8")
+        camera_images[camera_name] = bridge.imgmsg_to_cv2(msg, "rgb8")
     except Exception as e:
-        rospy.logerr(f"Failed to convert image: {e}")
+        rospy.logerr(f"Failed to convert image for {camera_name}: {e}")
 
+def start_camera_subscriber(camera_names: List[str] = None):
+    for camera_name in camera_names:
+        camera_subscriber = rospy.Subscriber(
+            f"/{camera_name}_camera/color/image_raw",
+            Image,
+            partial(_camera_color_callback, camera_name),
+            queue_size=1,
+        )
 
-def _color_callback_side(msg: Image):
-    """Callback for the color image."""
-    global side_image
-    bridge = CvBridge()
-    try:
-        side_image = bridge.imgmsg_to_cv2(msg, "rgb8")
-    except Exception as e:
-        rospy.logerr(f"Failed to convert image: {e}")
-
-
-def start_camera_subscriber():
-    global base_camera_subscriber, side_camera_subscriber
-    base_camera_subscriber = rospy.Subscriber(
-        "/base_camera/color/image_raw",
-        Image,
-        _color_callback_base,
-        queue_size=1,
-    )
-    side_camera_subscriber = rospy.Subscriber(
-        "/side_camera/color/image_raw",
-        Image,
-        _color_callback_side,
-        queue_size=1,
-    )
 def _button_callback(msg: String):
     global button_state
     button_state = msg.data
@@ -128,11 +115,7 @@ def main():
         camera_clients = {}
     else:
         camera_clients = {}
-        global base_image
-        global side_image
-        base_image = None
-        side_image = None
-        start_camera_subscriber()
+        start_camera_subscriber(camera_names)
 
         if controller_type == "joint_trajectory_controller":
             from gello_ros.robots.ros_joint_trajectory_control_robot import (
@@ -185,7 +168,6 @@ def main():
         time.sleep(1)
 
         # Start the gello agent
-
         obs = env.get_obs()
         robot_joints = obs["joint_positions"]
         print(f"Robot joints: {robot_joints}")
@@ -258,13 +240,16 @@ def main():
                     f"Joint [{j}], leader: {action[j]}, follower: {joints[j]}, diff: {action[j] - joints[j]}"
                 )
             exit()
+        # Initialize camera images
+        for camera_name in camera_names:
+            obs[f"{camera_name}_rgb"] = camera_images.get(camera_name)
     if agent_type == "touch":
         env = RobotEnv(robot, control_rate_hz=hz, camera_dict=camera_clients,control_mode="pose")
         print("Using 3D Systems Touch agent")
         # Initialize obs
         obs = env.get_obs()
-        obs["base_rgb"] = base_image
-        obs["side_rgb"] = side_image
+        for camera_name in camera_names:
+            obs[f"{camera_name}_rgb"] = camera_images.get(camera_name)
         agent = TouchAgent()
     elif agent_type == "dummy" or agent_type == "none":
         env = RobotEnv(robot, control_rate_hz=hz, camera_dict=camera_clients,control_mode="joint")
@@ -294,8 +279,8 @@ def main():
         )
         # Initialize obs
         obs = env.get_obs()
-        obs["base_rgb"] = base_image
-        obs["side_rgb"] = side_image
+        for camera_name in camera_names:
+            obs[f"{camera_name}_rgb"] = camera_images.get(camera_name)
     elif agent_type == "policy":
         raise NotImplementedError("add your imitation policy here if there is one")
     else:
@@ -324,8 +309,8 @@ def main():
                         step_st = time.time()
                         action = agent.act(obs)
                         obs = env.step(action)
-                        obs["base_rgb"] = base_image
-                        obs["side_rgb"] = side_image
+                        for camera_name in camera_names:
+                                    obs[f"{camera_name}_rgb"] = camera_images.get(camera_name)
                         action_replay.append(action)
                         obs_replay.append(obs)
                         message = f"\rEpisode number: {current_episode_number} Time passed: {round(time.time() - st_episode, 2)},\tTime for step: {round((time.time() - step_st)*1000,1)} ms   "
@@ -367,8 +352,8 @@ def main():
                     step_st = time.time()
                     action = agent.act(obs, t)
                     obs = env.step(action)
-                    obs["base_rgb"] = base_image
-                    obs["side_rgb"] = side_image
+                    for camera_name in camera_names:
+                        obs[f"{camera_name}_rgb"] = camera_images.get(camera_name)
                     message = f"\rTime passed: {round(time_passed, 2)} Step: {t} Time for step: {round((time.time() - step_st)*1000,1)} ms   "
                     print_color(
                         message,
