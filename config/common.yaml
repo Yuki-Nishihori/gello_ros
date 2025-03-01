@@ -13,7 +13,7 @@ teleoperation_mode: "bilateral" # "unilateral" or "bilateral"
 use_gripper: False
 use_FT_sensor: True
 touch_max_force: 3.3
-force_scale_to_touch: 1
+force_scale_to_touch: 0.8
 
 
 # camera config
