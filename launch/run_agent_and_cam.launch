@@ -8,10 +8,10 @@
   <arg name="camera_type" default="realsense" />
 
   <group if="$(eval arg('camera_type') == 'realsense')">
-    <include file="$(find gello_ros)/launch/realsense.launch" />
+    <include file="$(find gello_ros)/launch/run_cam_realsense.launch" />
   </group>
-  <group if="$(eval arg('camera_type') == 'usb_cam')">
-    <include file="$(find gello_ros)/launch/usb_cam.launch" />
+  <group if="$(eval arg('camera_type') == 'uvc_cam')">
+    <include file="$(find gello_ros)/launch/run_cam_uvc.launch" />
   </group>
 
   <group if="$(arg save_episode)">
