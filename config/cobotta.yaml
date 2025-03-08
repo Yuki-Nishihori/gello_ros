@@ -43,7 +43,7 @@ use_gripper: True
 use_FT_sensor: False
 gello_port: "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FT88YXAT-if00-port0"
 
-gello_start_joints:
+gello_home_joints:
   - 0.0  # joint_1
   - 0.0  # joint_2
   - !degrees 90.0  # joint_3

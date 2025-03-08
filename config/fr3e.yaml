@@ -33,7 +33,7 @@ joint_pos_limits_upper:
 joint_trajectory_controller_command_topic: "/frrobot/position_trajectory_controller/command"
 joint_states_topic: "/joint_states"
 
-gello_start_joints:
+gello_home_joints:
   - !degrees -90.0 # j1
   - !degrees -90.0  # j2
   - !degrees -90.0  # j3
