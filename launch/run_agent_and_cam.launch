@@ -5,7 +5,7 @@
   <arg name="node_start_delay" default="10.0" />
   <arg name="save_episode" default="false" />
   <arg name="agent_type" default="touch" />
-  <arg name="camera_type" default="realsense" />
+  <arg name="camera_type" default="uvc_cam" />
 
   <group if="$(eval arg('camera_type') == 'realsense')">
     <include file="$(find gello_ros)/launch/run_cam_realsense.launch" />

@@ -5,8 +5,9 @@
   <arg name="touch_config" default="$(find gello_ros)/config/touch.yaml" />
   <arg name="save_episode" default="false" />
   <arg name="agent_type" default="touch" />
+  <arg name="node_start_delay" default="10.0" />
 
-  <node name="run_agent_node" pkg="gello_ros" type="run_agent_node.py" output="screen">
+  <node name="run_agent_node" pkg="gello_ros" type="run_agent_node.py" output="screen" launch-prefix="bash -c 'sleep $(arg node_start_delay); $0 $@' ">
     <rosparam command="load" file="$(arg robot_config)" />
     <rosparam command="load" file="$(arg common_config)" />
     <param name="save_episode" value="$(arg save_episode)" />
