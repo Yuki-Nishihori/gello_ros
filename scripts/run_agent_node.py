@@ -72,7 +72,7 @@ def start_button_subscriber():
         String,
         _button_callback,
         queue_size=1,
-    )
+    )    
     
 def save_episode_thread(episode_number, obs_replay, action_replay):
     save_episode(episode_number, obs_replay, action_replay)
@@ -81,27 +81,21 @@ def main():
     rospy.init_node("agent_node", anonymous=True)
 
     agent_type: str = rospy.get_param("~agent_type", "gello")
-    hostname: str = rospy.get_param("~default_hostname", "127.0.0.1")
-    robot_port: int = rospy.get_param("~default_robot_port", 6001)
-    camera_port: int = rospy.get_param("~default_camera_port", 7001)
     camera_names: List[str] = rospy.get_param("~camera_names", None)
 
-    robot_type: str = None  # only needed for quest agent or spacemouse agent
     hz: int = rospy.get_param("~control_hz", 100)
-    start_joints: List[float] = rospy.get_param("~gello_start_joints")
+    gello_home_joints: List[float] = rospy.get_param("~gello_home_joints")
+    touch_home_pose: List[float] = rospy.get_param("~touch_home_pose")
+    print(f"Touch home pose: {touch_home_pose}")
     controller_type: str = rospy.get_param("~controller_type")
     use_gripper: bool = rospy.get_param("~use_gripper")
     use_FT_sensor: bool = rospy.get_param("~use_FT_sensor")
 
-    print(f"start_joints: {start_joints}")
-
     mock: bool = False
     use_save_interface: bool = rospy.get_param("~save_episode", False)
-    verbose: bool = False
     gello_port: str = rospy.get_param("~gello_port", None)
     number_of_episodes: int = rospy.get_param("~number_of_episodes", 1)
     number_of_steps: int = rospy.get_param("~number_of_steps", 1000)
-    task_name: str = rospy.get_param("~task_name", "cup_push")
     eval_ckpt_dir: str = rospy.get_param("~eval_ckpt_dir", "policy_last.ckpt")
 
     if use_save_interface:
@@ -160,7 +154,7 @@ def main():
                     "No gello port found, please specify one or plug in gello"
                 )
 
-        gello_reset_joints = np.array(start_joints)
+        gello_reset_joints = np.array(gello_home_joints)
         # agent = GelloAgent(
         #     port=gello_port, start_joints=gello_reset_joints
         # )
@@ -243,14 +237,19 @@ def main():
         # Initialize camera images
         for camera_name in camera_names:
             obs[f"{camera_name}_rgb"] = camera_images.get(camera_name)
+
     if agent_type == "touch":
         env = RobotEnv(robot, control_rate_hz=hz, camera_dict=camera_clients,control_mode="pose")
         print("Using 3D Systems Touch agent")
+        # Initialize the touch agent
+        agent = TouchAgent()
+        # Move the robot towards the touch_home_pose until it's close enough
+        env.step(touch_home_pose)
+        time.sleep(5)
         # Initialize obs
         obs = env.get_obs()
         for camera_name in camera_names:
             obs[f"{camera_name}_rgb"] = camera_images.get(camera_name)
-        agent = TouchAgent()
     elif agent_type == "dummy" or agent_type == "none":
         env = RobotEnv(robot, control_rate_hz=hz, camera_dict=camera_clients,control_mode="joint")
         agent = DummyAgent(num_dofs=robot_client.num_dofs())
@@ -277,6 +276,7 @@ def main():
         agent = ACTAgent(
             policy, camera_names, train_cfg, policy_config, task_cfg=cfg, device=device
         )
+
         # Initialize obs
         obs = env.get_obs()
         for camera_name in camera_names:
