@@ -20,7 +20,7 @@ TASK_CONFIG = {
     "dataset_dir": "/root/onolab/catkin_ws/src/gello_software/gello_ros/scripts/episode_data/20241202_184842_cup_push",
     "state_dim": 6,
     "action_dim": 6,
-    "camera_names": ["bottom_rgb"]
+    "camera_names": ["bottom_rgb"],
     "camera_port": 0,
 }
 
