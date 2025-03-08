@@ -38,7 +38,7 @@ cartesian_motion_controller_command_topic: "/target_frame"
 ee_link: "pestle_tip"
 joint_states_topic: "/joint_states"
 
-gello_start_joints:
+gello_home_joints:
   - !degrees  -90.0  # shoulder_pan_joint
   - !degrees  -90.0  # shoulder_lift_joint
   - !degrees  -90.0  # elbow_joint
@@ -46,5 +46,21 @@ gello_start_joints:
   - !degrees  90.0  # wrist_2_joint
   - !degrees  0.0  # wrist_3_joint
 
+touch_home_pose:
+  - 0.308
+  - 0.263
+  - 0.1
+  - 0.0
+  - 1.0 
+  - 0.0
+  - 0.0
 
 
+touch_start_pose:
+  - 0.308
+  - 0.263
+  - 0.04
+  - 0.0
+  - 1.0 
+  - 0.0
+  - 0.0
