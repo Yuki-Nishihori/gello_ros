@@ -88,6 +88,7 @@ def main():
     touch_home_pose: List[float] = rospy.get_param("~touch_home_pose")
     touch_start_pose: List[float] = rospy.get_param("~touch_start_pose")
     controller_type: str = rospy.get_param("~controller_type")
+    control_mode: str = rospy.get_param("~control_mode")
     use_gripper: bool = rospy.get_param("~use_gripper")
     use_FT_sensor: bool = rospy.get_param("~use_FT_sensor")
 
@@ -140,7 +141,8 @@ def main():
     
 
     if agent_type == "gello":
-        env = RobotEnv(robot, control_rate_hz=hz, camera_dict=camera_clients,control_mode="joint")
+        assert control_mode in "joint" 
+        env = RobotEnv(robot, control_rate_hz=hz, camera_dict=camera_clients, control_mode=control_mode)
         print("Using Gello agent")
         gello_port = gello_port
         if gello_port is None:
@@ -239,12 +241,14 @@ def main():
             obs[f"{camera_name}_rgb"] = camera_images.get(camera_name)
 
     if agent_type == "touch":
-        env = RobotEnv(robot, control_rate_hz=hz, camera_dict=camera_clients,control_mode="pose")
+        assert control_mode in "cartesian"
+        env = RobotEnv(robot, control_rate_hz=hz, camera_dict=camera_clients,control_mode=control_mode)
         print("Using 3D Systems Touch agent")
         # Initialize the touch agent
         agent = TouchAgent()
         # Move the robot towards the touch_home_pose until it's close enough
-        env.step(touch_home_pose)
+        action={"ee_pos": touch_home_pose[:3], "ee_quat": touch_home_pose[3:]}
+        env.step(action)
         time.sleep(5)
         # Initialize obs
         obs = env.get_obs()
@@ -254,7 +258,7 @@ def main():
         env = RobotEnv(robot, control_rate_hz=hz, camera_dict=camera_clients,control_mode="joint")
         agent = DummyAgent(num_dofs=robot_client.num_dofs())
     elif agent_type == "act":
-        env = RobotEnv(robot, control_rate_hz=hz, camera_dict=camera_clients,control_mode="joint")
+        env = RobotEnv(robot, control_rate_hz=hz, camera_dict=camera_clients,control_mode=control_mode)
         # load config
         cfg = TASK_CONFIG
         policy_config = POLICY_CONFIG
@@ -299,9 +303,10 @@ def main():
                     if agent_type == "gello":
                         pass
                     elif agent_type == "touch":
-                        obs=env.step(touch_start_pose)
+                        action={"ee_pos": touch_start_pose[:3], "ee_quat": touch_start_pose[3:]}
+                        obs=env.step(action)
                         time.sleep(5)
-                        obs=env.step(touch_start_pose)
+                        obs=env.step(action)
                         action = agent.act(obs,force_pose_update=True)
                     elif agent_type == "act":
                         pass

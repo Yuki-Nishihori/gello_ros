@@ -24,9 +24,9 @@ class RobotEnv:
         robot: Robot,
         control_rate_hz: float = 100.0,
         camera_dict: Optional[Dict[str, CameraDriver]] = None,
-        control_mode: str = "joint",
+        control_mode: str = "cartesian",
     ) -> None:
-        assert control_mode in ["joint", "pose"], "control_mode must be 'joint' or 'pose'"
+        assert control_mode in ["joint", "cartesian"]
         self._robot = robot
         self._rate = Rate(control_rate_hz)
         self._camera_dict = {} if camera_dict is None else camera_dict
@@ -43,23 +43,15 @@ class RobotEnv:
     def __len__(self):
         return 0
 
-    def step(self, command: np.ndarray) -> Dict[str, Any]:
-        """Step the environment forward.
-
-        Args:
-            command: joint angles or pose command to step the environment with.
-
-        Returns:
-            obs: observation from the environment.
-        """
-        if self._control_mode == "pose":
-            assert len(command) == 7, "Pose must be a 7-element array (xyz + xyzw)."
-            self._robot.command_pose(command)
+    def step(self, action: np.ndarray) -> Dict[str, Any]:
+        
+        if self._control_mode == "cartesian":
+            assert action["ee_quat"] is not None
+            pos_quat = np.concatenate([action["ee_pos"], action["ee_quat"]])
+            self._robot.command_pose(pos_quat)
         elif self._control_mode == "joint":
-            assert len(command) == (
-                self._robot.num_dofs()
-            ), f"input:{len(command)}, robot:{self._robot.num_dofs()}"
-            self._robot.command_joint_state(command)
+            assert action["joint_positions"] is not None
+            self._robot.command_joint_state(action["joint_positions"])
         else:
             raise ValueError("Invalid control mode")
         

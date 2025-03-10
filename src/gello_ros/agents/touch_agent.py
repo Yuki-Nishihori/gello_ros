@@ -164,6 +164,8 @@ class TouchAgent(Agent):
         return np.concatenate((robot_start_pose[:3] + pos_diff, new_quat))
 
     def act(self, obs: Dict[str, np.ndarray],force_pose_update: bool = False) -> np.ndarray:
+        action_dict={}
+        action_pos_quat = np.zeros(7)
         pos_quat = np.append(obs["ee_pos"],obs["ee_quat"])
 
         # Calculate the force feedback in the base frame (see calculated wrench in RViz)
@@ -190,10 +192,17 @@ class TouchAgent(Agent):
         if self._white_button == 1 and self._grey_button == 1:
             vertical_pose = self.calculate_pose_difference(self._touch_start_pose, self._touch_current_pose, self._robot_start_pose)
             vertical_pose[3:] = self.z_down_quat
-            return vertical_pose
+            action_pos_quat = vertical_pose
         elif self._white_button == 1:
-            return self.calculate_pose_difference(self._touch_start_pose, self._touch_current_pose, self._robot_start_pose)
+            action_pos_quat = self.calculate_pose_difference(self._touch_start_pose, self._touch_current_pose, self._robot_start_pose)
         else:
             if self._robot_current_pose is None or force_pose_update:
                 self._robot_current_pose = pos_quat
-            return self._robot_current_pose
+            action_pos_quat = self._robot_current_pose
+
+        action_dict["joint_positions"]=None
+        action_dict["ee_pos"] = action_pos_quat[:3]
+        action_dict["ee_quat"] = action_pos_quat[3:]
+        action_dict["ee_rot_matrix"] = tf.transformations.quaternion_matrix(action_pos_quat[3:])[:3,:3]
+        action_dict["ee_euler"]=tf.transformations.euler_from_quaternion(action_pos_quat[3:])
+        return action_dict
