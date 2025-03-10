@@ -2,28 +2,36 @@
   <arg name="robot_config" default="$(find gello_ros)/config/ur5e.yaml" />
   <arg name="common_config" default="$(find gello_ros)/config/common.yaml" />
   <arg name="touch_config" default="$(find gello_ros)/config/touch.yaml" />
-  <arg name="node_start_delay" default="10.0" />
   <arg name="save_episode" default="false" />
   <arg name="agent_type" default="touch" />
   <arg name="camera_type" default="uvc_cam" />
 
   <group if="$(eval arg('camera_type') == 'realsense')">
     <include file="$(find gello_ros)/launch/run_cam_realsense.launch" />
+    <include file="$(find gello_ros)/launch/run_agent.launch" >
+      <arg name="robot_config" value="$(arg robot_config)" />
+      <arg name="common_config" value="$(arg common_config)" />
+      <arg name="touch_config" value="$(arg touch_config)" />
+      <arg name="node_start_delay" value="10" />
+      <arg name="save_episode" value="$(arg save_episode)" />
+      <arg name="agent_type" value="$(arg agent_type)" />
+    </include>
   </group>
   <group if="$(eval arg('camera_type') == 'uvc_cam')">
     <include file="$(find gello_ros)/launch/run_cam_uvc.launch" />
+    <include file="$(find gello_ros)/launch/run_agent.launch" >
+      <arg name="robot_config" value="$(arg robot_config)" />
+      <arg name="common_config" value="$(arg common_config)" />
+      <arg name="touch_config" value="$(arg touch_config)" />
+      <arg name="node_start_delay" value="1" />
+      <arg name="save_episode" value="$(arg save_episode)" />
+      <arg name="agent_type" value="$(arg agent_type)" />
+    </include>
   </group>
 
   <group if="$(arg save_episode)">
     <node name="run_gui" pkg="gello_ros" type="run_GUI.py" output="screen" />
   </group>
 
-  <include file="$(find gello_ros)/launch/run_agent.launch" >
-    <arg name="robot_config" value="$(arg robot_config)" />
-    <arg name="common_config" value="$(arg common_config)" />
-    <arg name="touch_config" value="$(arg touch_config)" />
-    <arg name="node_start_delay" value="$(arg node_start_delay)" />
-    <arg name="save_episode" value="$(arg save_episode)" />
-    <arg name="agent_type" value="$(arg agent_type)" />
-  </include>
+
 </launch>
