@@ -211,7 +211,8 @@ class MujocoRobotServer:
         return {
             "joint_positions": joint_positions,
             "joint_velocities": joint_velocities,
-            "ee_pos_quat": np.concatenate([ee_pos, ee_quat]),
+            "ee_pos": ee_pos,
+            "ee_quat": ee_quat,
             "gripper_position": gripper_pos,
         }
 

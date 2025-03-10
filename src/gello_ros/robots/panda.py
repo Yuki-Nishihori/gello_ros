@@ -62,7 +62,8 @@ class PandaRobot(Robot):
         return {
             "joint_positions": joints,
             "joint_velocities": joints,
-            "ee_pos_quat": pos_quat,
+            "ee_pos": pos_quat[:3],
+            "ee_quat": pos_quat[3:],
             "gripper_position": gripper_pos,
         }
 

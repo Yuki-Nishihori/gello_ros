@@ -80,7 +80,8 @@ class PrintRobot(Robot):
         return {
             "joint_positions": joint_state,
             "joint_velocities": joint_state,
-            "ee_pos_quat": pos_quat,
+            "ee_pos": pos_quat[:3],
+            "ee_quat": pos_quat[3:],
             "gripper_position": np.array(0),
         }
 

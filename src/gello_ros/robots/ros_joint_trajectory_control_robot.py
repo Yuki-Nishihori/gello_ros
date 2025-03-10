@@ -171,7 +171,8 @@ class JointTrajectoryControlRobot(Robot):
         return {
             "joint_positions": j_pos,
             "joint_velocities": j_vel,
-            "ee_pos_quat": pos_quat,
+            "ee_pos": pos_quat[:3],
+            "ee_quat": pos_quat[3:],
             "gripper_position": gripper_pos,
             "ee_wrench": wrench,
             "jacobian": jacobian,
