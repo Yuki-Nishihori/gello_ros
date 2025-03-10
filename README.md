@@ -41,7 +41,7 @@ These scripts have been simplified for single-handed use, in contrast to the bim
    - "libuvc_camera"を使う
 ### USBカメラの指定可能なフォーマットの調べ方
 ```
-root@onolab_ros:~/onolab/catkin_ws# v4l2-ctl --device /dev/video0 --list-formats-ext
+v4l2-ctl --device /dev/video0 --list-formats-ext
 ioctl: VIDIOC_ENUM_FMT
 	Type: Video Capture
 
