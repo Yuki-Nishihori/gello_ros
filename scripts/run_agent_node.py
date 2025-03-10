@@ -299,15 +299,17 @@ def main():
                     if agent_type == "gello":
                         pass
                     elif agent_type == "touch":
-                        env.step(touch_start_pose)
+                        obs=env.step(touch_start_pose)
                         time.sleep(5)
+                        obs=env.step(touch_start_pose)
+                        action = agent.act(obs,force_pose_update=True)
                     elif agent_type == "act":
                         pass
                     elif agent_type == "dummy":
                         pass
                     else:
                         raise ValueError(f"Invalid agent type {agent_type}")
-                    
+
                     obs_replay = []
                     action_replay = []
                     if current_save_thread is not None and current_save_thread.is_alive():
