@@ -86,7 +86,7 @@ def main():
     hz: int = rospy.get_param("~control_hz", 100)
     gello_home_joints: List[float] = rospy.get_param("~gello_home_joints")
     touch_home_pose: List[float] = rospy.get_param("~touch_home_pose")
-    print(f"Touch home pose: {touch_home_pose}")
+    touch_start_pose: List[float] = rospy.get_param("~touch_start_pose")
     controller_type: str = rospy.get_param("~controller_type")
     use_gripper: bool = rospy.get_param("~use_gripper")
     use_FT_sensor: bool = rospy.get_param("~use_FT_sensor")
@@ -295,6 +295,19 @@ def main():
         while not rospy.is_shutdown():
             if use_save_interface:
                 if button_state == "start":
+                    print("\nMoving to the start pose")
+                    if agent_type == "gello":
+                        pass
+                    elif agent_type == "touch":
+                        env.step(touch_start_pose)
+                        time.sleep(5)
+                    elif agent_type == "act":
+                        pass
+                    elif agent_type == "dummy":
+                        pass
+                    else:
+                        raise ValueError(f"Invalid agent type {agent_type}")
+                    
                     obs_replay = []
                     action_replay = []
                     if current_save_thread is not None and current_save_thread.is_alive():
