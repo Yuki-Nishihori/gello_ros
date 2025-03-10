@@ -3,8 +3,8 @@ import datetime
 import h5py
 import rospy
 
+# Get the current timestamp
 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-
 
 def save_episode(episode_number, obs_replay, action_replay):
     """
@@ -15,61 +15,75 @@ def save_episode(episode_number, obs_replay, action_replay):
         obs_replay (list): list of observations.
         action_replay (list): list of actions.
     """
-    # configration dictionary
+    # Configuration dictionary
     cfg = {
         "camera_names": rospy.get_param("~camera_names", ["base"]),
         "cam_width": rospy.get_param("~camera_width", 640),
         "cam_height": rospy.get_param("~camera_height", 480),
-        "state_dim": rospy.get_param("~state_dim", 6),
         "action_dim": rospy.get_param("~action_dim", 6),
+        "wrench_dim": rospy.get_param("~wrench_dim", 6),
         "save_episode_dir": rospy.get_param("~save_episode_dir", "./episode_data"),
         "task_name": rospy.get_param("~task_name", "default"),
         "use_FT_sensor": rospy.get_param("~use_FT_sensor", False),
     }
 
-    # create a dictionary to store the data
+    print(f"Saving episode {episode_number} to {cfg['save_episode_dir']}")
+
+    # Create a dictionary to store the data
     data_dict = {
-        "/observations/qpos": [],
-        "/observations/qvel": [],
         "/action": [],
+        "/observations/joint_positions": [],
+        "/observations/joint_velocities": [],
+        "/observations/joint_torques": [],
+        "/observations/ee_pos": [],
+        "/observations/ee_quat": [],
+        "/observations/ee_rot_matrix": [],
+        "/observations/ee_euler": [],
     }
-    # there may be more than one camera
+
+    # Add camera images to the data dictionary
     for cam_name in cfg["camera_names"]:
         img_name = f"{cam_name}_rgb"
         data_dict[f"/observations/images/{img_name}"] = []
-    # add FT sensor data
+
+    # Add FT sensor data if used
     if cfg["use_FT_sensor"]:
         data_dict["/observations/wrench"] = []
 
-    # store the observations and actions
+    # Store the observations and actions
     for o, a in zip(obs_replay, action_replay):
-        data_dict["/observations/qpos"].append(o["joint_positions"])
-        data_dict["/observations/qvel"].append(o["joint_velocities"])
         data_dict["/action"].append(a)
+        data_dict["/observations/joint_positions"].append(o["joint_positions"])
+        data_dict["/observations/joint_velocities"].append(o["joint_velocities"])
+        data_dict["/observations/joint_torques"].append(o["joint_torques"])
+        data_dict["/observations/ee_pos"].append(o["ee_pos"])
+        data_dict["/observations/ee_quat"].append(o["ee_quat"])
+        data_dict["/observations/ee_rot_matrix"].append(o["ee_rot_matrix"])
+        data_dict["/observations/ee_euler"].append(o["ee_euler"])
         if cfg["use_FT_sensor"]:
             data_dict["/observations/wrench"].append(o["ee_wrench"])
-        # store the images
+        # Store the images
         for cam_name in cfg["camera_names"]:
             img_name = f"{cam_name}_rgb"
             data_dict[f"/observations/images/{img_name}"].append(o[img_name])
 
-    max_timesteps = len(data_dict["/observations/qpos"])
+    max_timesteps = len(data_dict["/action"])
 
-    # create data dir if it doesn't exist
+    # Create data directory if it doesn't exist
     data_dir = os.path.join(cfg["save_episode_dir"], timestamp + "_" + cfg["task_name"])
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)
 
-    # count number of files in the directory to avoid overwriting
+    # Define the dataset path
     dataset_path = os.path.join(data_dir, f"episode_{episode_number}")
 
-    # save the data
+    # Save the data to an HDF5 file
     with h5py.File(dataset_path + ".hdf5", "w", rdcc_nbytes=1024**2 * 2) as root:
         root.attrs["sim"] = True
         obs = root.create_group("observations")
         image = obs.create_group("images")
 
-        # create datasets for each camera's images
+        # Create datasets for each camera's images
         for cam_name in cfg["camera_names"]:
             img_name = f"{cam_name}_rgb"
             _ = image.create_dataset(
@@ -79,14 +93,22 @@ def save_episode(episode_number, obs_replay, action_replay):
                 chunks=(1, cfg["cam_height"], cfg["cam_width"], 3),
             )
 
-        # create datasets for qpos, qvel, and actions
-        qpos = obs.create_dataset("qpos", (max_timesteps, cfg["state_dim"]))
-        qvel = obs.create_dataset("qvel", (max_timesteps, cfg["state_dim"]))
-        action = root.create_dataset("action", (max_timesteps, cfg["action_dim"]))
-        if cfg["use_FT_sensor"]:
-            wrench = obs.create_dataset("wrench", (max_timesteps, cfg["state_dim"]))
+        # Create HDF5 datasets for the new observations
+        _ = obs.create_dataset("joint_positions", (max_timesteps, 6))  # Assuming 6 joints
+        _ = obs.create_dataset("joint_velocities", (max_timesteps, 6))  # Assuming 6 joints
+        _ = obs.create_dataset("joint_torques", (max_timesteps, 6))  # Assuming 6 joints
+        _ = obs.create_dataset("ee_pos", (max_timesteps, 3))  # Assuming 3D position
+        _ = obs.create_dataset("ee_quat", (max_timesteps, 4))  # Assuming 4-element quaternion
+        _ = obs.create_dataset("ee_rot_matrix", (max_timesteps, 3, 3))  # Assuming 3x3 rotation matrix
+        _ = obs.create_dataset("ee_euler", (max_timesteps, 3))  # Assuming 3-element Euler angles
 
-        # store the data in the corresponding dataset
+        if cfg["use_FT_sensor"]:
+            _ = obs.create_dataset("wrench", (max_timesteps, cfg["wrench_dim"]))
+
+        # Create datasets for actions
+        _ = root.create_dataset("action", (max_timesteps, cfg["action_dim"]))
+
+        # Store the data in the corresponding dataset
         for name, array in data_dict.items():
             root[name][...] = array
 
