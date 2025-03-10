@@ -1,6 +1,4 @@
 # operation config
-default_hostname: "127.0.0.1"
-default_robot_port: 6001
 control_hz: 500
 touch_ee_pose_topic:  "/touch/tip_pose"
 touch_button_topic: "/touch/button"
@@ -17,11 +15,10 @@ force_scale_to_touch: 0.8
 
 
 # camera config
-default_camera_port: 7001 # If there are multiple cameras, use consecutive numbers
 camera_names: ["bottom"] # "base" or "side" or "bottom"
 camera_width: 640
 camera_height: 480
-camera_fps: 60
+camera_fps: 30
 
 # imitation learning config
 task_name: "cup_push"
@@ -29,5 +26,5 @@ save_episode_dir: "/root/onolab/catkin_ws/src/gello_software/gello_ros/scripts/e
 eval_ckpt_dir: "/root/onolab/catkin_ws/src/gello_software/gello_ros/scripts/checkpoints/20241202_185808_cup_push"
 number_of_episodes: 5 # trials
 number_of_steps: 10000 # steps for each episode
-state_dim: 6
-action_dim: 6
+state_dim: 7
+action_dim: 7
