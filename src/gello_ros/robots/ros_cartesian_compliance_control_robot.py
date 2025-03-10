@@ -13,7 +13,7 @@ from std_srvs.srv import Empty
 from ur_pykdl import ur_kinematics
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 import time
-
+import tf.transformations
 
 class CartesianComplianceControlRobot(Robot):
     """A class representing a UR robot."""
@@ -195,8 +195,12 @@ class CartesianComplianceControlRobot(Robot):
         return {
             "joint_positions": joints,
             "joint_velocities": joints,
+            "joint_torques": joints,
             "gripper_position": gripper_pos,
-            "ee_pos_quat": pos_quat,
+            "ee_pos": pos_quat[:3],
+            "ee_quat": pos_quat[3:],
+            "ee_rot_matrix": tf.transformations.quaternion_matrix(pos_quat[3:])[:3, :3],
+            "ee_euler": tf.transformations.euler_from_quaternion(pos_quat[3:]),
             "ee_wrench": wrench,
             "jacobian": jacobian,
         }
