@@ -46,11 +46,12 @@ class RobotEnv:
     def step(self, action: np.ndarray) -> Dict[str, Any]:
         
         if self._control_mode == "cartesian":
-            assert action["ee_quat"] is not None
+            assert action["ee_quat"] is not np.zeros(4)
+            assert action["ee_pos"] is not np.zeros(3)
             pos_quat = np.concatenate([action["ee_pos"], action["ee_quat"]])
             self._robot.command_pose(pos_quat)
         elif self._control_mode == "joint":
-            assert action["joint_positions"] is not None
+            assert action["joint_positions"] is not np.zeros(6)
             self._robot.command_joint_state(action["joint_positions"])
         else:
             raise ValueError("Invalid control mode")

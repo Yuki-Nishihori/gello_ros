@@ -200,7 +200,7 @@ class TouchAgent(Agent):
                 self._robot_current_pose = pos_quat
             action_pos_quat = self._robot_current_pose
 
-        action_dict["joint_positions"]=None
+        action_dict["joint_positions"]=np.zeros(6)
         action_dict["ee_pos"] = action_pos_quat[:3]
         action_dict["ee_quat"] = action_pos_quat[3:]
         action_dict["ee_rot_matrix"] = tf.transformations.quaternion_matrix(action_pos_quat[3:])[:3,:3]
