@@ -164,6 +164,7 @@ class TouchAgent(Agent):
         return np.concatenate((robot_start_pose[:3] + pos_diff, new_quat))
 
     def act(self, obs: Dict[str, np.ndarray]) -> np.ndarray:
+        pos_quat = np.append(obs["ee_pos"],obs["ee_quat"])
 
         # Calculate the force feedback in the base frame (see calculated wrench in RViz)
         try:
@@ -179,11 +180,10 @@ class TouchAgent(Agent):
         
         # Keep track of the start pose when the white button is pressed
         if self._prev_white_button == 0 and self._white_button == 1:
-            self._robot_start_pose = obs["ee_pos_quat"]
+            self._robot_start_pose = pos_quat
             self._touch_start_pose = self._touch_current_pose
         elif self._prev_white_button == 1 and self._white_button == 0:
-            self._robot_current_pose = obs["ee_pos_quat"] 
-            print("Robot current pose: ", self._robot_current_pose)
+            self._robot_current_pose = pos_quat
         self._prev_white_button = self._white_button
         
         # Return the pose
@@ -195,5 +195,5 @@ class TouchAgent(Agent):
             return self.calculate_pose_difference(self._touch_start_pose, self._touch_current_pose, self._robot_start_pose)
         else:
             if self._robot_current_pose is None:
-                self._robot_current_pose = obs["ee_pos_quat"]
+                self._robot_current_pose = pos_quat
             return self._robot_current_pose
