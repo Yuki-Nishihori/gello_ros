@@ -305,10 +305,6 @@ def main():
                         action = agent.act(obs,force_pose_update=True)
                     elif agent_type == "act":
                         pass
-                    elif agent_type == "dummy":
-                        pass
-                    else:
-                        raise ValueError(f"Invalid agent type {agent_type}")
 
                     obs_replay = []
                     action_replay = []
