@@ -23,7 +23,7 @@ camera_fps: 30
 # imitation learning config
 task_name: "grinding_test"
 save_episode_dir: "/root/onolab/catkin_ws/src/gello_ros/scripts/episode_data"
-eval_ckpt_dir: "/root/onolab/catkin_ws/src/gello_ros/scripts/checkpoints/20241202_185808_cup_push"
+eval_ckpt_dir: "/root/onolab/catkin_ws/src/gello_ros/scripts/checkpoints/20250311_095946_grinding_test"
 number_of_episodes: 10 # trials
 number_of_steps: 20000 # steps for each episode
 control_mode: "cartesian" # "joints" or "cartesian"
