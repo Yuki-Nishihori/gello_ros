@@ -6,7 +6,7 @@ import rospy
 from einops import rearrange
 import torch
 from gello_ros.agents.agent import Agent
-
+import tf.transformations
 
 class ACTAgent(Agent):
     def __init__(
@@ -108,16 +108,20 @@ class ACTAgent(Agent):
         Returns:
             np.ndarray: The generated action.
         """
+
+        action_dict={}
+        obs_pos_rot_matrix = np.append(obs["ee_pos"],obs["ee_rot_matrix"].flatten())
+
         with torch.inference_mode():
             # Convert observations to image tensor
             img = self._image_converter(obs)
 
             # Preprocess joint positions
-            processed_joint_positions = self.pre_process(obs["joint_positions"])
+            processed_pos_rot_matrix = self.pre_process(obs_pos_rot_matrix)
 
             # Process joint positions
-            processed_joint_positions = (
-                torch.from_numpy(processed_joint_positions)
+            processed_pos_rot_matrix = (
+                torch.from_numpy(processed_pos_rot_matrix)
                 .float()
                 .to(self.device)
                 .unsqueeze(0)
@@ -125,7 +129,7 @@ class ACTAgent(Agent):
 
             # Call the policy to get actions at specific time steps
             if t % self.query_frequency == 0:
-                self.all_actions = self.policy(processed_joint_positions, img)
+                self.all_actions = self.policy(processed_pos_rot_matrix, img)
 
             if self.query_frequency == 1:  # Temporal aggregation
                 self.all_time_actions[[t], t : t + self.query_frequency] = (
@@ -154,5 +158,17 @@ class ACTAgent(Agent):
             # Post-process actions
             raw_action = raw_action.squeeze(0).cpu().numpy()
             action = self.post_process(raw_action)
+            pos=action[:3]
+            rot_matrix=action[3:].reshape((3,3))
+            rot_hom = np.eye(4)
+            rot_hom[:3, :3] = rot_matrix
+            quat=tf.transformations.quaternion_from_matrix(rot_hom)
+            euler=tf.transformations.euler_from_matrix(rot_hom)
 
-            return action
+            action_dict["joint_positions"]=np.zeros(6)
+            action_dict["ee_pos"] = pos
+            action_dict["ee_rot_matrix"] = rot_matrix
+            action_dict["ee_quat"] = quat
+            action_dict["ee_euler"]= euler
+
+            return action_dict

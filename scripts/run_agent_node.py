@@ -348,6 +348,7 @@ def main():
                 elif button_state == "pass":
                     step_st = time.time()
                     action = agent.act(obs)
+                    print("ee_euler", obs["ee_euler"])
                     obs = env.step(action)
                     message = f"\rWaiting for the next episode.\tTime for step: {round((time.time() - step_st)*1000,1)} ms   "
                     print_color(
@@ -363,6 +364,14 @@ def main():
                 else:
                     raise ValueError(f"Invalid state {button_state}")
             elif agent_type == "act":
+                # Initialize position and observation
+                action={"ee_pos": touch_start_pose[:3], "ee_quat": touch_start_pose[3:]}
+                obs=env.step(action)
+                time.sleep(5)
+                obs=env.step(action)
+                for camera_name in camera_names:
+                    obs[f"{camera_name}_rgb"] = camera_images.get(camera_name)
+                # Run the agent
                 for t in range(number_of_steps):
                     time_passed = time.time() - start_time
                     step_st = time.time()
