@@ -21,13 +21,13 @@ camera_height: 480
 camera_fps: 30
 
 # imitation learning config
-task_name: "cup_push"
+task_name: "grinding_test"
 save_episode_dir: "/root/onolab/catkin_ws/src/gello_ros/scripts/episode_data"
 eval_ckpt_dir: "/root/onolab/catkin_ws/src/gello_ros/scripts/checkpoints/20241202_185808_cup_push"
-number_of_episodes: 5 # trials
-number_of_steps: 10000 # steps for each episode
+number_of_episodes: 10 # trials
+number_of_steps: 20000 # steps for each episode
 control_mode: "cartesian" # "joints" or "cartesian"
 pose_representation: "euler" # "euler" or "rotation_matrix"
-state_dim: 7
-action_dim: 7
+state_dim: 12
+action_dim: 12
 wrench_dim: 6

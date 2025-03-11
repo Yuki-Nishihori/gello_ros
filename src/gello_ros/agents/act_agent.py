@@ -48,7 +48,7 @@ class ACTAgent(Agent):
 
         # Preprocess and postprocess lambdas
         self.pre_process = (
-            lambda s_qpos: (s_qpos - self.stats["qpos_mean"]) / self.stats["qpos_std"]
+            lambda s_qpos: (s_qpos - self.stats["obs_mean"]) / self.stats["obs_std"]
         )
         self.post_process = (
             lambda a: a * self.stats["action_std"] + self.stats["action_mean"]
