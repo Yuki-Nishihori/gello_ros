@@ -14,18 +14,13 @@ import datetime
 
 from gello_ros.policy.utils import *
 
-# parse the task name via command line
-parser = argparse.ArgumentParser()
-parser.add_argument("--task", type=str, default="cup_push")
-args = parser.parse_args()
-task = args.task
 
 # configs
 task_cfg = TASK_CONFIG
 train_cfg = TRAIN_CONFIG
 policy_config = POLICY_CONFIG
 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-checkpoint_dir = os.path.join(train_cfg["checkpoint_dir"], timestamp + "_" + task)
+checkpoint_dir = os.path.join(train_cfg["checkpoint_dir"], timestamp + "_" + task_cfg["tsak_name"])
 
 # device
 device = os.environ["DEVICE"]

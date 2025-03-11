@@ -17,6 +17,7 @@ os.environ["DEVICE"] = device
 
 # task config (you can add new tasks)
 TASK_CONFIG = {
+    "task_name": "grinding_test",
     "dataset_dir": "/root/onolab/catkin_ws/src/gello_ros/scripts/episode_data/20250310_180900_grinding_test",
     "state_dim": 12,
     "action_dim": 12,
@@ -48,5 +49,5 @@ TRAIN_CONFIG = {
     "num_epochs": 2000,  # number of training epochs
     "batch_size_val": 8,
     "batch_size_train": 8,
-    "checkpoint_dir": "/root/onolab/catkin_ws/src/gello_software/gello_ros/scripts/checkpoints",
+    "checkpoint_dir": "/root/onolab/catkin_ws/src/gello_ros/scripts/checkpoints",
 }
