@@ -1,65 +1,81 @@
-from typing import Dict
-
-import numpy as np
-
-from gello_ros.robots.robot import Robot
-
-import rospy
-from moveit_commander import MoveGroupCommander
+import rclpy
+from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from geometry_msgs.msg import PoseStamped, WrenchStamped
+from trajectory_msgs.msg import JointTrajectory
+from moveit_commander import MoveGroupCommander
+import numpy as np
+import tf_transformations as tf
 
-
+from gello_ros.robots.robot import Robot
 from ur_pykdl import ur_kinematics
-from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
+from typing import Dict
 
 
-class CartesianMotionControlRobot(Robot):
-    """A class representing a UR robot."""
+class CartesianMotionControlRobot(Node, Robot):
+    def __init__(self, use_gripper: bool = False):
+        rclpy.init()
+        Node.__init__(self, "ros2_cartesian_motion_robot")
+        Robot.__init__(self)
 
-    def __init__(
-        self,
-        use_gripper: bool = False,
-    ):
         if use_gripper:
-            print("supposed only no gripper")
+            self.get_logger().error("This implementation assumes no gripper.")
             exit()
 
-        self.joint_names_order = rospy.get_param("~joint_names_order")
-        self.joint_max_vel = rospy.get_param("~joint_max_vel")
-        self.joint_pos_limits_upper = rospy.get_param("~joint_pos_limits_upper")
-        self.joint_pos_limits_lower = rospy.get_param("~joint_pos_limits_lower")
-        self.trajectory_publisher = rospy.Publisher(
-            rospy.get_param("~joint_trajectory_controller_command_topic"),
-            JointTrajectory,
-            queue_size=1,
-        )
-        self.cartesian_command_publisher = rospy.Publisher(
-            rospy.get_param("~cartesian_motion_controller_command_topic"),
-            PoseStamped,
-            queue_size=1,
-        )
-        rospy.Subscriber(
-            rospy.get_param("~joint_states_topic"),
-            JointState,
-            self.joint_states_callback,
-        )
-        rospy.Subscriber(
-            rospy.get_param("~feedback_wrench_topic"),
-            WrenchStamped,
-            self.wrench_callback,
-        )
-        self._wrench = WrenchStamped()
-        self.move_group = MoveGroupCommander(
-            rospy.get_param("move_group_name", "manipulator")
-        )
-        self.kinematics = ur_kinematics()
-        self.ee_link = rospy.get_param("~ee_link")
+        self.declare_parameters('', [
+            ("joint_names_order", None),
+            ("joint_max_vel", None),
+            ("joint_pos_limits_upper", None),
+            ("joint_pos_limits_lower", None),
+            ("joint_trajectory_controller_command_topic", None),
+            ("cartesian_motion_controller_command_topic", None),
+            ("joint_states_topic", "/joint_states"),
+            ("feedback_wrench_topic", "/wrench"),
+            ("move_group_name", "manipulator"),
+            ("ee_link", "tool0"),
+        ])
 
-        control_freq = 100
-        self._min_traj_dur = 5.0 / control_freq
-        self._speed_scale = 1
+        self.joint_names_order = self.get_parameter("joint_names_order").value
+        self.joint_max_vel = self.get_parameter("joint_max_vel").value
+        self.joint_pos_limits_upper = self.get_parameter("joint_pos_limits_upper").value
+        self.joint_pos_limits_lower = self.get_parameter("joint_pos_limits_lower").value
+        self.ee_link = self.get_parameter("ee_link").value
+
+        self.trajectory_pub = self.create_publisher(
+            JointTrajectory,
+            self.get_parameter("joint_trajectory_controller_command_topic").value,
+            10
+        )
+        self.cartesian_pub = self.create_publisher(
+            PoseStamped,
+            self.get_parameter("cartesian_motion_controller_command_topic").value,
+            10
+        )
+
+        self.ros_joint_state = None
+        self._wrench = WrenchStamped()
+
+        self.create_subscription(
+            JointState,
+            self.get_parameter("joint_states_topic").value,
+            self.joint_states_callback,
+            10
+        )
+        self.create_subscription(
+            WrenchStamped,
+            self.get_parameter("feedback_wrench_topic").value,
+            self.wrench_callback,
+            10
+        )
+
+        self.move_group = MoveGroupCommander(self.get_parameter("move_group_name").value)
+        self.kinematics = ur_kinematics()
+
         self._use_gripper = use_gripper
+        self._speed_scale = 1
+        self._min_traj_dur = 5.0 / 100
+
+        self.get_logger().info("CartesianMotionControlRobot node initialized")
 
     def joint_states_callback(self, msg: JointState):
         self.ros_joint_state = msg
@@ -68,68 +84,40 @@ class CartesianMotionControlRobot(Robot):
         self._wrench = msg
 
     def num_dofs(self) -> int:
-        """Get the number of joints of the robot.
-
-        Returns:
-            int: The number of joints of the robot.
-        """
-        if self._use_gripper:
-            return 7
-        return 6
+        return 7 if self._use_gripper else 6
 
     def get_joint_state(self) -> np.ndarray:
-        """Get the current state of the leader robot.
-
-        Returns:
-            T: The current state of the leader robot.
-        """
-
-        # Create a dictionary for easy lookup
-        joint_positions_dict = dict(
-            zip(self.ros_joint_state.name, self.ros_joint_state.position)
-        )
-        # Reorder the joints according to self.joint_names
-        self.robot_joints = np.array(
-            [joint_positions_dict[name] for name in self.joint_names_order]
-        )
-
+        joint_positions_dict = dict(zip(self.ros_joint_state.name, self.ros_joint_state.position))
+        self.robot_joints = np.array([joint_positions_dict[name] for name in self.joint_names_order])
         return self.robot_joints
 
     def command_joint_state(self, joint_state: np.ndarray) -> None:
-        """Command the leader robot to a given state.
-
-        Args:
-            joint_state (np.ndarray): The state to command the leader robot to.
-        """
         pose = self.kinematics.forward(joint_state, tip_link=self.ee_link)
-        pose_stamped = PoseStamped()
-        pose_stamped.header.stamp = rospy.Time.now()
-        pose_stamped.header.frame_id = "base_link"
-        pose_stamped.pose.position.x = pose[0]
-        pose_stamped.pose.position.y = pose[1]
-        pose_stamped.pose.position.z = pose[2]
-        pose_stamped.pose.orientation.x = pose[3]
-        pose_stamped.pose.orientation.y = pose[4]
-        pose_stamped.pose.orientation.z = pose[5]
-        pose_stamped.pose.orientation.w = pose[6]
-
-        self.cartesian_command_publisher.publish(pose_stamped)
+        msg = PoseStamped()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = "base_link"
+        msg.pose.position.x = pose[0]
+        msg.pose.position.y = pose[1]
+        msg.pose.position.z = pose[2]
+        msg.pose.orientation.x = pose[3]
+        msg.pose.orientation.y = pose[4]
+        msg.pose.orientation.z = pose[5]
+        msg.pose.orientation.w = pose[6]
+        self.cartesian_pub.publish(msg)
 
     def get_observations(self) -> Dict[str, np.ndarray]:
         joints = self.get_joint_state()
         pos_quat = self.kinematics.forward(joints, tip_link=self.ee_link)
-        gripper_pos = np.array([joints[-1]])
-        wrench = np.array(
-            [
-                self._wrench.wrench.force.x,
-                self._wrench.wrench.force.y,
-                self._wrench.wrench.force.z,
-                self._wrench.wrench.torque.x,
-                self._wrench.wrench.torque.y,
-                self._wrench.wrench.torque.z,
-            ]
-        )
-        jacobian = self.move_group.get_jacobian_matrix(list(joints))
+        gripper_pos = np.array([joints[-1]]) if self._use_gripper else np.zeros(1)
+        wrench = np.array([
+            self._wrench.wrench.force.x,
+            self._wrench.wrench.force.y,
+            self._wrench.wrench.force.z,
+            self._wrench.wrench.torque.x,
+            self._wrench.wrench.torque.y,
+            self._wrench.wrench.torque.z,
+        ])
+        jacobian = self.move_group.get_jacobian_matrix(joints.tolist())
         return {
             "joint_positions": joints,
             "joint_velocities": joints,
@@ -142,8 +130,13 @@ class CartesianMotionControlRobot(Robot):
 
 
 def main():
-    rospy.init_node("ros_robot")
-    ros_robot = CartesianMotionControlRobot(use_gripper=False)
+    node = CartesianMotionControlRobot(use_gripper=False)
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        node.get_logger().info("Shutting down node")
+    node.destroy_node()
+    rclpy.shutdown()
 
 
 if __name__ == "__main__":

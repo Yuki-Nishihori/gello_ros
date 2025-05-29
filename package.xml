@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<package format="2">
+<package format="3">
   <name>gello_ros</name>
   <version>0.0.0</version>
   <description>The gello_ros package</description>
@@ -8,19 +8,24 @@
 
   <license>MIT</license>
 
-  <depend>roscpp</depend>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
   <depend>std_msgs</depend>
   <depend>sensor_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>dynamixel_sdk</depend>
   <depend>realsense2_camera</depend>
-  <depend>libuvc_camera</depend>
+  <depend>image_transport</depend>
   <depend>cv_bridge</depend>
-  <depend>spacenav_node</depend>
+  <!-- <depend>spacenav_node</depend> -->
 
-  <buildtool_depend>catkin</buildtool_depend>
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  
 
   <export>
-
+    <build_type>ament_cmake</build_type>
   </export>
 </package>

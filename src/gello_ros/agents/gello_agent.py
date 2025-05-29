@@ -1,41 +1,43 @@
-import os
-from dataclasses import dataclass
-from typing import Dict, Optional, Sequence, Tuple
-
 import numpy as np
+from typing import Dict, Optional
+
+from rclpy.node import Node
+from sensor_msgs.msg import JointState
 
 from gello_ros.agents.agent import Agent
-from gello_ros.robots.dynamixel import DynamixelRobot
-import time
-
-from sensor_msgs.msg import JointState
-import rospy
-import moveit_commander
-
 
 
 class GelloAgent(Agent):
-    def __init__(
-        self,
-        topic_name: str = "/gello_joint_states",
-    ):
-        self
-        gello_joint_states_sub = rospy.Subscriber(
-            topic_name, JointState, self.joint_states_callback
+    def __init__(self, node: Node, topic_name: str = "/gello_joint_states"):
+        """
+        Args:
+            node (Node): ROS 2 Node インスタンス
+            topic_name (str): JointState トピック名
+        """
+        self.node = node
+        self._joint_position: Optional[np.ndarray] = None
+
+        self.subscriber = self.node.create_subscription(
+            JointState,
+            topic_name,
+            self.joint_states_callback,
+            10
         )
-    def joint_states_callback(self, msg):
+
+    def joint_states_callback(self, msg: JointState):
         self._joint_position = np.array(msg.position)
-        
+
     def act(self, obs: Dict[str, np.ndarray]) -> np.ndarray:
-        # if self.mode == "bilateral":
-        #     jacobian_inv = np.linalg.pinv(obs["jacobian"])
-        #     wrench = obs["ee_wrench"]
-        #     wrench[2] *= -1
-        #     joint_torques = np.dot(jacobian_inv, wrench)
-        #     joint_currents = joint_torques / self.torque_constant
-        #     dynamixel_current_goals = joint_currents / self.current_goal_constant
-        #     dynamixel_current_goals = np.round(
-        #         dynamixel_current_goals * self.torque_rate
-        #     ).astype(int)
-        #     self._robot.command_joint_torque(dynamixel_current_goals)
+        """
+        観測から行動を返す（ここでは関節位置をそのまま返す）
+
+        Args:
+            obs: 観測情報（未使用）
+
+        Returns:
+            np.ndarray: 現在の関節位置
+        """
+        if self._joint_position is None:
+            self.node.get_logger().warn("Joint position not yet received.")
+            return np.zeros(6)  # or raise exception
         return self._joint_position

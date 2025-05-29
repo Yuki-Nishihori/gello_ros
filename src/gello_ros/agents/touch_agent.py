@@ -1,194 +1,148 @@
-import os
-from dataclasses import dataclass
-from typing import Dict, Optional, Sequence, Tuple
-
-import numpy as np
-
-from gello_ros.agents.agent import Agent
-from gello_ros.robots.dynamixel import DynamixelRobot
 import time
+import numpy as np
+from typing import Dict
 
+import rclpy
+from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped, WrenchStamped
 from omni_msgs.msg import OmniButtonEvent, OmniFeedback
-import rospy
-import moveit_commander
-import tf.transformations
-import tf2_ros
-import tf2_geometry_msgs
+import tf_transformations
+from tf2_ros import Buffer, TransformListener, LookupException, TimeoutException
 
 
-class TouchAgent(Agent):
-    def __init__(
-        self,
-    ):
-        ee_pose_topic = rospy.get_param("~touch_ee_pose_topic")
-        button_topic = rospy.get_param("~touch_button_topic")
-        force_feedback_topic = rospy.get_param("~touch_force_feedback_topic", "force_feedback")
-        self.touch_max_force = rospy.get_param("~touch_max_force", 1.5)
-        self.force_scale_to_touch = rospy.get_param("~force_scale_to_touch", 1.0)
+class TouchAgent(Node):
+    def __init__(self):
+        super().__init__('touch_agent')
+
+        self.declare_parameters(
+            namespace='',
+            parameters=[
+                ("touch_ee_pose_topic", "/touch/tip_pose"),
+                ("touch_button_topic", "/touch/button"),
+                ("touch_force_feedback_topic", "force_feedback"),
+                ("touch_max_force", 1.5),
+                ("force_scale_to_touch", 1.0),
+                ("teleoperation_mode", "unilateral")
+            ]
+        )
+
+        self.z_down_quat = tf_transformations.quaternion_from_euler(0, np.pi, 0)
         self._touch_current_pose = None
         self._touch_start_pose = None
         self._robot_start_pose = None
         self._robot_current_pose = None
-        self.z_down_quat = tf.transformations.quaternion_from_euler(0, np.pi, 0) 
-        self.teleop_mode = rospy.get_param("~teleoperation_mode", "unilateral")
-        if self.teleop_mode not in ["unilateral", "bilateral"]:
-            rospy.logerr(f"Invalid communication mode: {self.mode}. Exiting.")
-            exit()
-        else:
-            rospy.loginfo(f"Using {self.teleop_mode} teleoperation mode.")
-
-        # Publisher for force feedback
-        self.force_feedback_vis_pub = rospy.Publisher(
-            "force_feedback_vis", WrenchStamped, queue_size=10
-        )
-        self.force_feedback_pub = rospy.Publisher(
-            force_feedback_topic, OmniFeedback, queue_size=10
-        )
-        
-
-        # Subscriber for pose topic
-        self.pose_sub = rospy.Subscriber(
-            ee_pose_topic, PoseStamped, self.pose_callback
-        )
-        self.button_sub = rospy.Subscriber(
-            button_topic, OmniButtonEvent, self.button_callback
-        )
-        # self._force_transform_sub = rospy.Subscriber(
-        #     "force_transform", WrenchStamped, self.force_transform_callback
-        # )
         self._white_button = 0
         self._prev_white_button = 0
         self._grey_button = 0
 
-        # Wait for pose topic
+        self.touch_max_force = self.get_parameter("touch_max_force").value
+        self.force_scale_to_touch = self.get_parameter("force_scale_to_touch").value
+        self.teleop_mode = self.get_parameter("teleoperation_mode").value
+
+        # Publishers
+        self.force_feedback_vis_pub = self.create_publisher(WrenchStamped, "force_feedback_vis", 10)
+        self.force_feedback_pub = self.create_publisher(OmniFeedback, self.get_parameter("touch_force_feedback_topic").value, 10)
+
+        # Subscribers
+        self.create_subscription(PoseStamped, self.get_parameter("touch_ee_pose_topic").value, self.pose_callback, 10)
+        self.create_subscription(OmniButtonEvent, self.get_parameter("touch_button_topic").value, self.button_callback, 10)
+
+        # TF2 listener
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
+
+        # Wait for touch pose
         start_time = time.time()
         while self._touch_current_pose is None:
-            if time.time() - start_time > 5: # wait for 5 seconds
-                rospy.logerr(f"Timeout waiting for {ee_pose_topic} topic. Exiting.")
-                exit()
-            rospy.sleep(0.1)
+            if time.time() - start_time > 5:
+                self.get_logger().error("Timeout waiting for touch pose topic.")
+                rclpy.shutdown()
+                return
+            time.sleep(0.1)
 
-        # Initialize tf2 buffer and listener
-        self.tf_buffer = tf2_ros.Buffer()
-        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
+        self.get_logger().info(f"Using {self.teleop_mode} teleoperation mode.")
 
-    def pose_callback(self, msg):
-        pose_array = np.zeros(7)
-        pose_array[0] = msg.pose.position.x
-        pose_array[1] = msg.pose.position.y
-        pose_array[2] = msg.pose.position.z
-        pose_array[3] = msg.pose.orientation.x
-        pose_array[4] = msg.pose.orientation.y
-        pose_array[5] = msg.pose.orientation.z
-        pose_array[6] = msg.pose.orientation.w
+    def pose_callback(self, msg: PoseStamped):
+        pose_array = np.array([
+            msg.pose.position.x,
+            msg.pose.position.y,
+            msg.pose.position.z,
+            msg.pose.orientation.x,
+            msg.pose.orientation.y,
+            msg.pose.orientation.z,
+            msg.pose.orientation.w
+        ])
         self._touch_current_pose = pose_array
-    
-    def button_callback(self, msg):
+
+    def button_callback(self, msg: OmniButtonEvent):
         self._white_button = msg.white_button
         self._grey_button = msg.grey_button
 
     def transform_wrench(self, wrench_array, transform):
-        # Apply scaling to the force and torque
         wrench_array[:3] *= self.force_scale_to_touch
         wrench_array[3:] *= self.force_scale_to_touch
-
-        # Apply max force limit
         wrench_array[:3] = np.clip(wrench_array[:3], -self.touch_max_force, self.touch_max_force)
         wrench_array[3:] = np.clip(wrench_array[3:], -self.touch_max_force, self.touch_max_force)
 
-        wrench_in_tool = WrenchStamped()
-        wrench_in_tool.wrench.force.x = wrench_array[0]
-        wrench_in_tool.wrench.force.y = wrench_array[1]
-        wrench_in_tool.wrench.force.z = wrench_array[2]
-        wrench_in_tool.wrench.torque.x = wrench_array[3]
-        wrench_in_tool.wrench.torque.y = wrench_array[4]
-        wrench_in_tool.wrench.torque.z = wrench_array[5]
-        force_in_tool = np.array([wrench_in_tool.wrench.force.x,
-                                  wrench_in_tool.wrench.force.y,
-                                  wrench_in_tool.wrench.force.z])
-        torque_in_tool = np.array([wrench_in_tool.wrench.torque.x,
-                                   wrench_in_tool.wrench.torque.y,
-                                   wrench_in_tool.wrench.torque.z])
-
-        rotation = tf.transformations.quaternion_matrix([
+        rotation = tf_transformations.quaternion_matrix([
             transform.transform.rotation.x,
             transform.transform.rotation.y,
             transform.transform.rotation.z,
             transform.transform.rotation.w
         ])[:3, :3]
 
-        force_in_base = np.dot(rotation, force_in_tool)
-        tool_offset = np.array([transform.transform.translation.x,
-                                transform.transform.translation.y,
-                                transform.transform.translation.z])
-        torque_in_base = np.dot(rotation, torque_in_tool) + np.cross(tool_offset, force_in_base)
+        force_in_tool = wrench_array[:3]
+        torque_in_tool = wrench_array[3:]
 
-        wrench_in_base_vis = WrenchStamped()
-        wrench_in_base_vis.header.frame_id = "touch_force"
-        wrench_in_base_vis.wrench.force.x = force_in_base[0]
-        wrench_in_base_vis.wrench.force.y = force_in_base[1]
-        wrench_in_base_vis.wrench.force.z = force_in_base[2]
-        wrench_in_base_vis.wrench.torque.x = torque_in_base[0]
-        wrench_in_base_vis.wrench.torque.y = torque_in_base[1]
-        wrench_in_base_vis.wrench.torque.z = torque_in_base[2]
+        force_in_base = rotation @ force_in_tool
+        offset = np.array([
+            transform.transform.translation.x,
+            transform.transform.translation.y,
+            transform.transform.translation.z
+        ])
+        torque_in_base = rotation @ torque_in_tool + np.cross(offset, force_in_base)
 
-        wrench_in_base = OmniFeedback()
-        wrench_in_base.force.x = force_in_base[0]
-        wrench_in_base.force.y = force_in_base[1]
-        wrench_in_base.force.z = force_in_base[2]
+        vis = WrenchStamped()
+        vis.header.frame_id = "touch_force"
+        vis.wrench.force.x, vis.wrench.force.y, vis.wrench.force.z = force_in_base
+        vis.wrench.torque.x, vis.wrench.torque.y, vis.wrench.torque.z = torque_in_base
 
-        return wrench_in_base_vis, wrench_in_base
+        feedback = OmniFeedback()
+        feedback.force.x, feedback.force.y, feedback.force.z = force_in_base
+
+        return vis, feedback
 
     def calculate_pose_difference(self, start_pose, current_pose, robot_start_pose):
         pos_diff = current_pose[:3] - start_pose[:3]
-        start_quat = start_pose[3:]
-        current_quat = current_pose[3:]
-
-        # Convert quaternions to rotation matrices
-        start_rot = tf.transformations.quaternion_matrix(start_quat)[:3, :3]
-        current_rot = tf.transformations.quaternion_matrix(current_quat)[:3, :3]
-
-        # Calculate the relative rotation
-        relative_rot = np.dot(current_rot, np.linalg.inv(start_rot))
-
-        # Convert the relative rotation back to a quaternion
-        relative_quat = tf.transformations.quaternion_from_matrix(np.vstack((np.hstack((relative_rot, [[0], [0], [0]])), [0, 0, 0, 1])))
-
-        # Apply the relative rotation to the robot start pose quaternion
-        robot_start_quat = robot_start_pose[3:]
-        robot_start_rot = tf.transformations.quaternion_matrix(robot_start_quat)[:3, :3]
-        new_rot = np.dot(relative_rot, robot_start_rot)
-        new_quat = tf.transformations.quaternion_from_matrix(np.vstack((np.hstack((new_rot, [[0], [0], [0]])), [0, 0, 0, 1])))
-
+        start_rot = tf_transformations.quaternion_matrix(start_pose[3:])[:3, :3]
+        current_rot = tf_transformations.quaternion_matrix(current_pose[3:])[:3, :3]
+        relative_rot = current_rot @ np.linalg.inv(start_rot)
+        robot_start_rot = tf_transformations.quaternion_matrix(robot_start_pose[3:])[:3, :3]
+        new_rot = relative_rot @ robot_start_rot
+        new_quat = tf_transformations.quaternion_from_matrix(np.vstack((np.hstack((new_rot, [[0], [0], [0]])), [0, 0, 0, 1])))
         return np.concatenate((robot_start_pose[:3] + pos_diff, new_quat))
 
-    def act(self, obs: Dict[str, np.ndarray],force_pose_update: bool = False) -> np.ndarray:
-        action_dict={}
+    def act(self, obs: Dict[str, np.ndarray], force_pose_update: bool = False) -> Dict[str, np.ndarray]:
+        action_dict = {}
+        pos_quat = np.concatenate([obs["ee_pos"], obs["ee_quat"]])
         action_pos_quat = np.zeros(7)
-        pos_quat = np.append(obs["ee_pos"],obs["ee_quat"])
 
-        # Calculate the force feedback in the base frame (see calculated wrench in RViz)
         try:
-            transform = self.tf_buffer.lookup_transform("base", "tool0", rospy.Time(0), rospy.Duration(1.0))
-            wrench_in_base_vis,wrench_in_base = self.transform_wrench(obs["ee_wrench"], transform)
-            self.force_feedback_vis_pub.publish(wrench_in_base_vis)
-        except tf2_ros.TransformException as ex:
-            rospy.logwarn(f"TransformException: {ex}")
-        
-        # Publish the force feedback
-        if self.teleop_mode == "bilateral":
-            self.force_feedback_pub.publish(wrench_in_base)
-        
-        # Keep track of the start pose when the white button is pressed
+            transform = self.tf_buffer.lookup_transform("base", "tool0", rclpy.time.Time(), timeout=rclpy.duration.Duration(seconds=1.0))
+            wrench_vis, wrench_msg = self.transform_wrench(obs["ee_wrench"], transform)
+            self.force_feedback_vis_pub.publish(wrench_vis)
+            if self.teleop_mode == "bilateral":
+                self.force_feedback_pub.publish(wrench_msg)
+        except (LookupException, TimeoutException) as ex:
+            self.get_logger().warn(f"TF lookup failed: {ex}")
+
         if self._prev_white_button == 0 and self._white_button == 1:
             self._robot_start_pose = pos_quat
             self._touch_start_pose = self._touch_current_pose
         elif self._prev_white_button == 1 and self._white_button == 0:
             self._robot_current_pose = pos_quat
         self._prev_white_button = self._white_button
-        
-        # Return the pose
+
         if self._white_button == 1 and self._grey_button == 1:
             vertical_pose = self.calculate_pose_difference(self._touch_start_pose, self._touch_current_pose, self._robot_start_pose)
             vertical_pose[3:] = self.z_down_quat
@@ -200,9 +154,9 @@ class TouchAgent(Agent):
                 self._robot_current_pose = pos_quat
             action_pos_quat = self._robot_current_pose
 
-        action_dict["joint_positions"]=np.zeros(6)
+        action_dict["joint_positions"] = np.zeros(6)
         action_dict["ee_pos"] = action_pos_quat[:3]
         action_dict["ee_quat"] = action_pos_quat[3:]
-        action_dict["ee_rot_matrix"] = tf.transformations.quaternion_matrix(action_pos_quat[3:])[:3,:3]
-        action_dict["ee_euler"]=tf.transformations.euler_from_quaternion(action_pos_quat[3:])
+        action_dict["ee_rot_matrix"] = tf_transformations.quaternion_matrix(action_pos_quat[3:])[:3, :3]
+        action_dict["ee_euler"] = tf_transformations.euler_from_quaternion(action_pos_quat[3:])
         return action_dict
