@@ -26,7 +26,7 @@ save_episode_dir: "/root/onolab/catkin_ws/src/gello_ros/scripts/episode_data"
 eval_ckpt_dir: "/root/onolab/catkin_ws/src/gello_ros/scripts/checkpoints/20250311_095946_grinding_test"
 number_of_episodes: 10 # trials
 number_of_steps: 20000 # steps for each episode
-control_mode: "cartesian" # "joints" or "cartesian"
+control_mode: "cartesian" # "joint" or "cartesian"
 pose_representation: "euler" # "euler" or "rotation_matrix"
 state_dim: 12
 action_dim: 12
