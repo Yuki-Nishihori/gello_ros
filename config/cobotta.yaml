@@ -33,10 +33,11 @@ joint_pos_limits_upper:
 move_group_name: "arm"
 joint_trajectory_controller_command_topic: "/cobotta/arm_controller/command"
 cartesian_compliance_controller_command_topic: "/target_frame"
+cartesian_impedance_controller_command_topic: "/cartesian_impedance_controller/target_pose"
 cartesian_motion_controller_command_topic: "/target_frame"
 ee_link: "pestle_tip"
 joint_states_topic: "/joint_states"
-controller_type: "joint_trajectory_controller" # "joint_trajectory_controller" or "cartesian_compliance_controller"
+controller_type: "joint_trajectory_controller" # cobotta supports position control only
 feedback_wrench_topic: "/wrench/filtered"
 teleoperation_mode: "unilateral" # "unilateral" or "bilateral"
 use_gripper: True

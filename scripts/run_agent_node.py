@@ -124,6 +124,12 @@ def main():
             )
 
             robot = CartesianComplianceControlRobot(use_gripper)
+        elif controller_type == "cartesian_impedance_controller":
+            from gello_ros.robots.ros_cartesian_impedance_control_robot import (
+                CartesianImpedanceControlRobot,
+            )
+
+            robot = CartesianImpedanceControlRobot(use_gripper)
         elif controller_type == "cartesian_motion_controller":
             from gello_ros.robots.ros_cartesian_motion_control_robot import (
                 CartesianMotionControlRobot,

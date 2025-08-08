@@ -31,6 +31,9 @@ joint_pos_limits_upper:
   - 3.0543  # Upper limit for j6
 
 joint_trajectory_controller_command_topic: "/frrobot/position_trajectory_controller/command"
+cartesian_compliance_controller_command_topic: "/target_frame"
+cartesian_impedance_controller_command_topic: "/cartesian_impedance_controller/target_pose"
+cartesian_motion_controller_command_topic: "/target_frame"
 joint_states_topic: "/joint_states"
 
 gello_home_joints:
