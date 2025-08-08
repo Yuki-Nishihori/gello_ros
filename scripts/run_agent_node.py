@@ -91,6 +91,7 @@ def main():
     control_mode: str = rospy.get_param("~control_mode")
     use_gripper: bool = rospy.get_param("~use_gripper")
     use_FT_sensor: bool = rospy.get_param("~use_FT_sensor")
+    skip_initial_move: bool = rospy.get_param("~skip_initial_move", False)
 
     mock: bool = False
     use_save_interface: bool = rospy.get_param("~save_episode", False)
@@ -176,7 +177,7 @@ def main():
 
         gello_curr_joints = np.array(env.get_obs()["joint_positions"])
 
-        if gello_reset_joints.shape == gello_curr_joints.shape:
+        if not skip_initial_move and gello_reset_joints.shape == gello_curr_joints.shape:
             max_delta = (np.abs(gello_curr_joints - gello_reset_joints)).max()
             steps = min(int(max_delta / 0.01), 100)
             for jnt in np.linspace(gello_curr_joints, gello_reset_joints, steps):
@@ -253,9 +254,10 @@ def main():
         # Initialize the touch agent
         agent = TouchAgent()
         # Move the robot towards the touch_home_pose until it's close enough
-        action={"ee_pos": touch_home_pose[:3], "ee_quat": touch_home_pose[3:]}
-        env.step(action)
-        time.sleep(5)
+        if not skip_initial_move:
+            action={"ee_pos": touch_home_pose[:3], "ee_quat": touch_home_pose[3:]}
+            env.step(action)
+            time.sleep(5)
         # Initialize obs
         obs = env.get_obs()
         for camera_name in camera_names:
@@ -309,10 +311,11 @@ def main():
                     if agent_type == "gello":
                         pass
                     elif agent_type == "touch":
-                        action={"ee_pos": touch_start_pose[:3], "ee_quat": touch_start_pose[3:]}
-                        obs=env.step(action)
-                        time.sleep(5)
-                        obs=env.step(action)
+                        if not skip_initial_move:
+                            action={"ee_pos": touch_start_pose[:3], "ee_quat": touch_start_pose[3:]}
+                            obs=env.step(action)
+                            time.sleep(5)
+                            obs=env.step(action)
                         action = agent.act(obs,force_pose_update=True)
                     elif agent_type == "act":
                         pass
