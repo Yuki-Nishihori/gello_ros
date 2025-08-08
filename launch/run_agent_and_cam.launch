@@ -5,6 +5,8 @@
   <arg name="save_episode" default="false" />
   <arg name="agent_type" default="touch" />
   <arg name="camera_type" default="uvc_cam" />
+  <arg name="skip_initial_move" default="true" />
+  <arg name="controller_type" default="cartesian_compliance_controller" doc="Controller type: joint_trajectory_controller, cartesian_compliance_controller, or cartesian_impedance_controller" />
 
   <group if="$(eval arg('camera_type') == 'realsense')">
     <include file="$(find gello_ros)/launch/run_cam_realsense.launch" />
@@ -15,6 +17,8 @@
       <arg name="node_start_delay" value="10" />
       <arg name="save_episode" value="$(arg save_episode)" />
       <arg name="agent_type" value="$(arg agent_type)" />
+      <arg name="skip_initial_move" value="$(arg skip_initial_move)" />
+      <arg name="controller_type" value="$(arg controller_type)" />
     </include>
   </group>
   <group if="$(eval arg('camera_type') == 'uvc_cam')">
@@ -26,6 +30,8 @@
       <arg name="node_start_delay" value="1" />
       <arg name="save_episode" value="$(arg save_episode)" />
       <arg name="agent_type" value="$(arg agent_type)" />
+      <arg name="skip_initial_move" value="$(arg skip_initial_move)" />
+      <arg name="controller_type" value="$(arg controller_type)" />
     </include>
   </group>
 

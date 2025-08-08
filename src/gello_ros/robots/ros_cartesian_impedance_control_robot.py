@@ -163,7 +163,6 @@ class CartesianImpedanceControlRobot(Robot):
         pose_stamped.pose.orientation.y = pose[4]
         pose_stamped.pose.orientation.z = pose[5]
         pose_stamped.pose.orientation.w = pose[6]
-
         self.cartesian_command_publisher.publish(pose_stamped)
 
     def get_observations(self) -> Dict[str, np.ndarray]:
