@@ -14,13 +14,15 @@
   <depend>std_msgs</depend>
   <depend>sensor_msgs</depend>
   <depend>geometry_msgs</depend>
+  <depend>trajectory_msgs</depend>
+  <depend>std_srvs</depend>
   <depend>cv_bridge</depend>
   
   <!-- Hardware dependencies -->
   <depend>dynamixel_sdk</depend>
   <depend>realsense2_camera</depend>
-  <depend>libuvc_camera</depend>
-  <depend>spacenav_node</depend>
+  <depend>usb_cam</depend>
+  <depend>spacenav</depend>
 
   <!-- Kinematics dependencies -->
   <depend>kdl_parser</depend>
