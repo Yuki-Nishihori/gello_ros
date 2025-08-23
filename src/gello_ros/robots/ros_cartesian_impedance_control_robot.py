@@ -110,22 +110,37 @@ class CartesianImpedanceControlRobot(Robot):
             return 7
         return 6
 
-    def get_joint_state(self) -> np.ndarray:
+    def get_joint_state(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Get the current state of the leader robot.
 
         Returns:
-            T: The current state of the leader robot.
+            tuple: (positions, velocities, efforts) of the robot joints.
         """
-        # Create a dictionary for easy lookup
+        # Create dictionaries for easy lookup
         joint_positions_dict = dict(
             zip(self.ros_joint_state.name, self.ros_joint_state.position)
         )
+        joint_velocities_dict = dict(
+            zip(self.ros_joint_state.name, self.ros_joint_state.velocity)
+        )
+        joint_efforts_dict = dict(
+            zip(self.ros_joint_state.name, self.ros_joint_state.effort)
+        )
+        
         # Reorder the joints according to self.joint_names
-        self.robot_joints = np.array(
+        positions = np.array(
             [joint_positions_dict[name] for name in self.joint_names_order]
         )
+        velocities = np.array(
+            [joint_velocities_dict[name] for name in self.joint_names_order]
+        )
+        efforts = np.array(
+            [joint_efforts_dict[name] for name in self.joint_names_order]
+        )
+        
+        self.robot_joints = positions
 
-        return self.robot_joints
+        return positions, velocities, efforts
 
     def command_joint_state(self, joint_state: np.ndarray) -> None:
         """Command the leader robot to a given state.
@@ -166,9 +181,10 @@ class CartesianImpedanceControlRobot(Robot):
         self.cartesian_command_publisher.publish(pose_stamped)
 
     def get_observations(self) -> Dict[str, np.ndarray]:
-        joints = self.get_joint_state()
-        pos_quat = self.kinematics.forward(joints, tip_link=self.ee_link)
-        gripper_pos = np.array([joints[-1]])
+        joint_positions, joint_velocities, joint_efforts = self.get_joint_state()
+        pos_quat = self.kinematics.forward(joint_positions, tip_link=self.ee_link)
+        gripper_pos = np.array([joint_positions[-1]])
+        
         wrench = np.array(
             [
                 self._wrench.wrench.force.x,
@@ -179,11 +195,11 @@ class CartesianImpedanceControlRobot(Robot):
                 self._wrench.wrench.torque.z,
             ]
         )
-        jacobian = self.move_group.get_jacobian_matrix(list(joints))
+        jacobian = self.move_group.get_jacobian_matrix(list(joint_positions))
         return {
-            "joint_positions": joints,
-            "joint_velocities": joints,
-            "joint_torques": joints,
+            "joint_positions": joint_positions,
+            "joint_velocities": joint_velocities,
+            "joint_torques": joint_efforts,
             "gripper_position": gripper_pos,
             "ee_pos": pos_quat[:3],
             "ee_quat": pos_quat[3:],
