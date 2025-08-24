@@ -1,67 +1,70 @@
-joint_names_order:
-  - "shoulder_pan_joint"
-  - "shoulder_lift_joint"
-  - "elbow_joint"
-  - "wrist_1_joint"
-  - "wrist_2_joint"
-  - "wrist_3_joint"
+/**:
+  ros__parameters:
 
-joint_max_vel:
-  - !degrees  180.0  # Joint velocity value for shoulder_pan_joint
-  - !degrees  180.0  # Joint velocity value for shoulder_lift_joint
-  - !degrees  180.0  # Joint velocity value for elbow_joint
-  - !degrees  180.0  # Joint velocity value for wrist_1_joint
-  - !degrees  180.0  # Joint velocity value for wrist_2_joint
-  - !degrees  180.0  # Joint velocity value for wrist_3_joint
+    joint_names_order:
+      - "shoulder_pan_joint"
+      - "shoulder_lift_joint"
+      - "elbow_joint"
+      - "wrist_1_joint"
+      - "wrist_2_joint"
+      - "wrist_3_joint"
 
-# we artificially limit elbow joint to half its actual joint position limit to avoid (MoveIt/OMPL) planning problems,
-joint_pos_limits_lower:
-  - !degrees  -360.0  # Lower limit for shoulder_pan_joint
-  - !degrees  -360.0  # Lower limit for shoulder_lift_joint
-  - !degrees  -180.0  # Lower limit for elbow_joint
-  - !degrees  -360.0  # Lower limit for wrist_1_joint
-  - !degrees  -360.0  # Lower limit for wrist_2_joint
-  - !degrees  -360.0  # Lower limit for wrist_3_joint
+    joint_max_vel:
+      - !degrees  180.0  # Joint velocity value for shoulder_pan_joint
+      - !degrees  180.0  # Joint velocity value for shoulder_lift_joint
+      - !degrees  180.0  # Joint velocity value for elbow_joint
+      - !degrees  180.0  # Joint velocity value for wrist_1_joint
+      - !degrees  180.0  # Joint velocity value for wrist_2_joint
+      - !degrees  180.0  # Joint velocity value for wrist_3_joint
 
-joint_pos_limits_upper:
-  - !degrees  360.0  # Upper limit for shoulder_pan_joint
-  - !degrees  360.0  # Upper limit for shoulder_lift_joint
-  - !degrees  180.0  # Upper limit for elbow_joint
-  - !degrees  360.0  # Upper limit for wrist_1_joint
-  - !degrees  360.0  # Upper limit for wrist_2_joint
-  - !degrees  360.0  # Upper limit for wrist_3_joint
+    # we artificially limit elbow joint to half its actual joint position limit to avoid (MoveIt/OMPL) planning problems,
+    joint_pos_limits_lower:
+      - !degrees  -360.0  # Lower limit for shoulder_pan_joint
+      - !degrees  -360.0  # Lower limit for shoulder_lift_joint
+      - !degrees  -180.0  # Lower limit for elbow_joint
+      - !degrees  -360.0  # Lower limit for wrist_1_joint
+      - !degrees  -360.0  # Lower limit for wrist_2_joint
+      - !degrees  -360.0  # Lower limit for wrist_3_joint
 
-move_group_name: "manipulator"
-joint_trajectory_controller_command_topic: "/scaled_pos_joint_traj_controller/command"
-cartesian_motion_controller_command_topic: "/cartesian_controllers/target_pose"
-cartesian_compliance_controller_command_topic: "/cartesian_controllers/target_pose"
-cartesian_impedance_controller_command_topic: "/cartesian_impedance_controller/target_pose"
-ee_link: "pestle_tip"
-joint_states_topic: "/joint_states"
+    joint_pos_limits_upper:
+      - !degrees  360.0  # Upper limit for shoulder_pan_joint
+      - !degrees  360.0  # Upper limit for shoulder_lift_joint
+      - !degrees  180.0  # Upper limit for elbow_joint
+      - !degrees  360.0  # Upper limit for wrist_1_joint
+      - !degrees  360.0  # Upper limit for wrist_2_joint
+      - !degrees  360.0  # Upper limit for wrist_3_joint
 
-gello_home_joints:
-  - !degrees  -90.0  # shoulder_pan_joint
-  - !degrees  -90.0  # shoulder_lift_joint
-  - !degrees  -90.0  # elbow_joint
-  - !degrees  -90.0  # wrist_1_joint
-  - !degrees  90.0  # wrist_2_joint
-  - !degrees  0.0  # wrist_3_joint
+    move_group_name: "manipulator"
+    joint_trajectory_controller_command_topic: "/scaled_joint_trajectory_controller/joint_trajectory"
+    cartesian_motion_controller_command_topic: "/cartesian_motion_controller/target_frame"
+    cartesian_compliance_controller_command_topic: "/cartesian_compliance_controller/target_frame"
+    cartesian_impedance_controller_command_topic: "/cartesian_impedance_controller/target_frame"
+    ee_link: "pestle_tip"
+    joint_states_topic: "/joint_states"
 
-touch_home_pose:
-  - 0.308
-  - 0.263
-  - 0.1
-  - 0.0
-  - 1.0 
-  - 0.0
-  - 0.0
+    gello_home_joints:
+      - !degrees  -90.0  # shoulder_pan_joint
+      - !degrees  -90.0  # shoulder_lift_joint
+      - !degrees  -90.0  # elbow_joint
+      - !degrees  -90.0  # wrist_1_joint
+      - !degrees  90.0  # wrist_2_joint
+      - !degrees  0.0  # wrist_3_joint
+
+    touch_home_pose:
+      - 0.308
+      - 0.263
+      - 0.1
+      - 0.0
+      - 1.0 
+      - 0.0
+      - 0.0
 
 
-touch_start_pose:
-  - 0.308
-  - 0.263
-  - 0.02
-  - 0.0
-  - 1.0 
-  - 0.0
-  - 0.0
+    touch_start_pose:
+      - 0.308
+      - 0.263
+      - 0.02
+      - 0.0
+      - 1.0 
+      - 0.0
+      - 0.0
