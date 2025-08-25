@@ -110,10 +110,21 @@ class TouchAgent(Agent, Node):
 
     def pose_callback(self, msg: PoseStamped) -> None:
         """Touchデバイスの姿勢を購読し、numpy配列として保存します。"""
+        # クォータニオンを検証
+        quat = np.array([msg.pose.orientation.x, msg.pose.orientation.y,
+                        msg.pose.orientation.z, msg.pose.orientation.w])
+        quat_norm = np.linalg.norm(quat)
+        
+        if quat_norm < 1e-6:  # ゼロノルムの場合
+            self.get_logger().warn("受信したクォータニオンがゼロノルムです。デフォルト値を設定します。")
+            quat = np.array([0.0, 0.0, 0.0, 1.0])  # 単位クォータニオン
+        else:
+            # 正規化
+            quat = quat / quat_norm
+            
         self._touch_current_pose = np.array([
             msg.pose.position.x, msg.pose.position.y, msg.pose.position.z,
-            msg.pose.orientation.x, msg.pose.orientation.y,
-            msg.pose.orientation.z, msg.pose.orientation.w
+            quat[0], quat[1], quat[2], quat[3]
         ])
 
     def button_callback(self, msg: TouchButtonEvent) -> None:
@@ -215,7 +226,7 @@ class TouchAgent(Agent, Node):
         if self.teleop_mode == "bilateral":
             try:
                 # 正しいROS2のAPIを使用
-                transform = self.tf_buffer.lookup_transform("base", "tool0", tf2_ros.Time(), timeout=Duration(seconds=1.0))
+                transform = self.tf_buffer.lookup_transform("base_link", "tool0", tf2_ros.Time(), timeout=Duration(seconds=1.0))
                 wrench_vis, wrench_feedback = self.transform_wrench(obs["ee_wrench"], transform)
                 
                 self.force_feedback_vis_pub.publish(wrench_vis)

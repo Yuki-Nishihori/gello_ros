@@ -336,16 +336,28 @@ class CartesianComplianceControlRobot(Robot, Node):
         # Convert quaternion to rotation matrix and euler angles
         if len(pos_quat) >= 7:
             try:
-                rotation = R.from_quat(pos_quat[3:7])  # x,y,z,w format
+                quat = pos_quat[3:7]
+                quat_norm = np.linalg.norm(quat)
+                
+                if quat_norm < 1e-6:  # ゼロノルムの場合
+                    self.get_logger().warn("受信したクォータニオンがゼロノルムです。デフォルト値を設定します。")
+                    quat = np.array([0.0, 0.0, 0.0, 1.0])  # 単位クォータニオン
+                else:
+                    # 正規化
+                    quat = quat / quat_norm
+                
+                rotation = R.from_quat(quat)  # x,y,z,w format
                 rot_matrix = rotation.as_matrix()
                 euler_angles = rotation.as_euler('xyz')
             except Exception as e:
                 self.get_logger().error(f"Failed to convert quaternion: {e}")
                 rot_matrix = np.eye(3)
                 euler_angles = np.zeros(3)
+                quat = np.array([0.0, 0.0, 0.0, 1.0])
         else:
             rot_matrix = np.eye(3)
             euler_angles = np.zeros(3)
+            quat = np.array([0.0, 0.0, 0.0, 1.0])
 
         return {
             "joint_positions": joints,
@@ -353,7 +365,7 @@ class CartesianComplianceControlRobot(Robot, Node):
             "joint_torques": joints,     # Note: Original code had bug, using joints for torques
             "gripper_position": gripper_pos,
             "ee_pos": pos_quat[:3] if len(pos_quat) >= 3 else np.zeros(3),
-            "ee_quat": pos_quat[3:7] if len(pos_quat) >= 7 else np.array([0, 0, 0, 1]),
+            "ee_quat": quat,
             "ee_rot_matrix": rot_matrix,
             "ee_euler": euler_angles,
             "ee_wrench": wrench,
