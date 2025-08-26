@@ -1,7 +1,7 @@
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, GroupAction
+from launch.actions import DeclareLaunchArgument, GroupAction, TimerAction
 from launch.substitutions import (
     LaunchConfiguration,
     Command,
@@ -68,11 +68,22 @@ def generate_launch_description():
         arguments=['1', '0.5', '0', '0', '0', '0', 'world', 'touch_base']
     )
 
+    # Create a TimerAction to delay the start of other nodes
+    delayed_nodes = TimerAction(
+        period=0.5,
+        actions=[
+            GroupAction([
+                touch_state_node,
+                robot_state_publisher_node,
+                
+            ])
+        ]
+    )
+
     return LaunchDescription([
         touch_config_arg,
-        GroupAction([
-            touch_base_tf_publisher_node,
-            robot_state_publisher_node,
-            touch_state_node,
-        ])
+        # Start the essential nodes immediately
+        touch_base_tf_publisher_node,
+        # Start other nodes after 0.5 seconds
+        delayed_nodes,
     ])
