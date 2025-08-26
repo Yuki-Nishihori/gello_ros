@@ -49,7 +49,7 @@ def generate_launch_description():
             description='Whether to skip the initial move'),
         DeclareLaunchArgument(
             'controller_type',
-            default_value='dummy_controller',
+            default_value='cartesian_compliance_controller',
             description='Controller type'),
 
         Node(
