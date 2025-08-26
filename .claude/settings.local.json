@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//home/ros/onolab_ros2/ros2_ws/src/third_party/powder_grinding_ros2/**)",
+      "Read(//home/ros/onolab_ros2/ros2_ws/src/third_party/quik/**)",
+      "Read(//home/ros/onolab_ros2/ros2_ws/src/third_party/powder_grinding_ros2/**)",
+      "Read(//home/ros/onolab_ros2/ros2_ws/src/third_party/kdl_parser/kdl_parser_py/kdl_parser_py/**)"
+    ],
+    "deny": [],
+    "ask": [],
+    "additionalDirectories": [
+      "/home/ros/onolab_ros2/ros2_ws/src/third_party/powder_grinding_ros2/grinding_robot_control/grinding_robot_control"
+    ]
+  }
+}

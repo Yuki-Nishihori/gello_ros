@@ -137,7 +137,12 @@ pub = node.create_publisher(String, '/topic', 10)
   - [x] `package.xml` をROS2フォーマット（format="3"）に更新
   - [x] `CMakeLists.txt` をament_cmakeベースに変更  
   - [x] `setup.py` の削除（ament_cmakeのみ使用）
-- [ ] Core ROS files移植
+- [x] Core ROS files移植
+  - [x] `scripts/run_agent_node.py` (メインノード) - 完全ROS2移植済み
+  - [x] `src/gello_ros/robots/ros_cartesian_impedance_control_robot.py` - ROS2移植済み
+  - [x] `src/gello_ros/robots/ros_cartesian_compliance_control_robot.py` - ROS2移植済み  
+  - [x] `src/gello_ros/robots/ros_cartesian_motion_control_robot.py` - ROS2移植済み
+  - [x] `src/gello_ros/robots/ros_joint_trajectory_control_robot.py` - ROS2移植済み
 - [ ] Launch files移植
 - [ ] Testing & Validation
 
@@ -145,7 +150,7 @@ pub = node.create_publisher(String, '/topic', 10)
 
 ### 1. 背景と課題
 
-ROS1で広く使われていた`urdf_parser_py`や`trac_ik_python`といった運動学計算ライブラリは、ROS2の標準ディストリビューションには含まれていません。そのため、ROS2へ移行するにあたり、これらの代替となるライブラリを再選定し、運動学計算（順運動学: FK、逆運動学: IK、ヤコビアン計算）の実装方法を再構築する必要がありました。
+ROS1で広く使われていた`urdf_parser_py`や`trac_ik_python`といった運動学計算ライブラリ、及びMoveItのラッパーである`moveit_commander`は、ROS2の標準ディストリビューションには含まれていません。そのため、ROS2へ移行するにあたり、これらの代替となるライブラリを再選定し、運動学計算（順運動学: FK、逆運動学: IK、ヤコビアン計算）の実装方法を再構築する必要がありました。
 
 ### 2. 採用ライブラリとセットアップ
 

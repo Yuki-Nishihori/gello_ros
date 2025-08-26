@@ -138,6 +138,7 @@ class TouchAgent(Agent, Node):
         """Touchデバイスのボタン状態を購読し、フラグを更新します。"""
         self._is_teleop_active = (msg.white_button == 1)
         self._is_z_lock_active = (msg.grey_button == 1)
+        self.get_logger().info("ボタン状態: 白=%d, 灰=%d" % (msg.white_button, msg.grey_button))
         
     def transform_wrench(
         self, wrench_array: np.ndarray, transform: tf2_ros.TransformStamped
@@ -254,24 +255,8 @@ class TouchAgent(Agent, Node):
                 self.force_feedback_vis_pub.publish(wrench_vis)
                 self.force_feedback_pub.publish(wrench_feedback)
             except tf2_ros.TransformException as ex:
-                # TF変換に失敗した場合（ダミーコントローラー等）は、単位変換を使用
-                self.get_logger().debug(f"TF変換に失敗しました（{self.touch_base_frame} -> {self.feedback_wrench_sensor_frame}）、単位変換を使用します: {ex}")
-                try:
-                    # 単位変換を作成
-                    from geometry_msgs.msg import TransformStamped, Transform, Vector3, Quaternion
-                    identity_transform = TransformStamped()
-                    identity_transform.header.frame_id = self.touch_base_frame
-                    identity_transform.child_frame_id = self.feedback_wrench_sensor_frame
-                    identity_transform.header.stamp = self.get_clock().now().to_msg()
-                    identity_transform.transform.translation = Vector3(x=0.0, y=0.0, z=0.0)
-                    identity_transform.transform.rotation = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
-                    
-                    wrench_vis, wrench_feedback = self.transform_wrench(obs["ee_wrench"], identity_transform)
-                    
-                    self.force_feedback_vis_pub.publish(wrench_vis)
-                    self.force_feedback_pub.publish(wrench_feedback)
-                except Exception as e:
-                    self.get_logger().debug(f"力覚フィードバック処理でエラーが発生しました: {e}")
+                self.get_logger().debug(f"力覚フィードバック処理でTF変換に失敗: {ex}")
+
         
         # --- テレオペレーションの状態遷移 ---
         # 白ボタンが押された瞬間

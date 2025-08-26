@@ -9,19 +9,24 @@ from gello_ros.robots.dynamixel import DynamixelRobot
 import time
 
 from sensor_msgs.msg import JointState
-import rospy
-import moveit_commander
+import rclpy
+from rclpy.node import Node
 
 
 
-class GelloAgent(Agent):
+class GelloAgent(Agent, Node):
     def __init__(
         self,
         topic_name: str = "/gello_joint_states",
     ):
-        self
-        gello_joint_states_sub = rospy.Subscriber(
-            topic_name, JointState, self.joint_states_callback
+        # Initialize ROS2 node
+        Node.__init__(self, 'gello_agent')
+        
+        # Initialize joint position variable
+        self._joint_position = None
+        # Create ROS2 subscriber
+        self.gello_joint_states_sub = self.create_subscription(
+            JointState, topic_name, self.joint_states_callback, 10
         )
     def joint_states_callback(self, msg):
         self._joint_position = np.array(msg.position)
