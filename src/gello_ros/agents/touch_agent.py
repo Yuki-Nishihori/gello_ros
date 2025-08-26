@@ -36,6 +36,8 @@ class TouchAgent(Agent, Node):
         self._touch_start_pose: np.ndarray | None = None
         self._robot_start_pose: np.ndarray | None = None
         self._robot_current_pose: np.ndarray | None = None
+        self._last_target_pose: np.ndarray | None = None  # 最後に計算された目標姿勢
+        self._pose_initialized = False  # 初期姿勢が設定されたかのフラグ
 
         # テレオペレーションの状態管理フラグ
         self._is_teleop_active = False  # 白ボタンが押されているか
@@ -223,12 +225,20 @@ class TouchAgent(Agent, Node):
                 self.get_logger().debug(f"力覚フィードバック処理でTF変換に失敗: {ex}")
 
         if self._is_teleop_active and not self._was_teleop_active:
-            self._robot_start_pose = current_ee_pose
-            print(self._robot_start_pose)
+            # ボタンを押した時の開始姿勢は、保持されている目標姿勢（なければ現在の実際の姿勢）
+            if self._robot_current_pose is not None:
+                self._robot_start_pose = self._robot_current_pose.copy()
+            else:
+                self._robot_start_pose = current_ee_pose
+            
             self._touch_start_pose = self._touch_current_pose
             self.get_logger().info("テレオペレーション開始")
         elif not self._is_teleop_active and self._was_teleop_active:
-            self._robot_current_pose = current_ee_pose
+            # ボタンを離した時点で、最後に計算された目標姿勢を保存（current_ee_poseではなく）
+            if self._last_target_pose is not None:
+                self._robot_current_pose = self._last_target_pose.copy()
+            else:
+                self._robot_current_pose = current_ee_pose
             self.get_logger().info("テレオペレーション終了")
         
         self._was_teleop_active = self._is_teleop_active
@@ -241,15 +251,22 @@ class TouchAgent(Agent, Node):
                         self._touch_start_pose, self._touch_current_pose, self._robot_start_pose
                     )
                     target_pose[3:] = self.z_down_quat
+                    self._last_target_pose = target_pose.copy()  # 計算した目標姿勢を保存
                 else:
                     target_pose = self.calculate_pose_difference(
                         self._touch_start_pose, self._touch_current_pose, self._robot_start_pose
                     )
+                    self._last_target_pose = target_pose.copy()  # 計算した目標姿勢を保存
             else:
                 target_pose = self._robot_current_pose if self._robot_current_pose is not None else current_ee_pose
         else:
-            if self._robot_current_pose is None or force_pose_update:
+            # テレオペ非アクティブ時の姿勢維持ロジック
+            if self._robot_current_pose is None or not self._pose_initialized:
                 self._robot_current_pose = current_ee_pose
+                self._pose_initialized = True
+            elif force_pose_update:
+                self._robot_current_pose = current_ee_pose
+            
             target_pose = self._robot_current_pose
 
         target_quat = target_pose[3:]

@@ -281,18 +281,10 @@ class CartesianComplianceControlRobot(Robot, Node):
 
     def joint_states_callback(self, msg: JointState):
         """Joint states callback"""
-        if len(msg.name) > 0:
-            print(f"JOINT_STATE DEBUG: Received {len(msg.name)} joints:")
-            print(f"  Names: {msg.name}")
-            print(f"  Positions: {msg.position[:len(msg.name)] if msg.position else 'None'}")
-            print(f"  Expected order: {self.joint_names_order}")
-        else:
-            print("JOINT_STATE DEBUG: Empty joint state received")
         self.ros_joint_state = msg
 
     def wrench_callback(self, msg: WrenchStamped):
         """Wrench feedback callback"""
-        print(f"WRENCH DEBUG: Received wrench - force: [{msg.wrench.force.x:.3f}, {msg.wrench.force.y:.3f}, {msg.wrench.force.z:.3f}]")
         self._wrench = msg
 
     def num_dofs(self) -> int:
@@ -312,7 +304,6 @@ class CartesianComplianceControlRobot(Robot, Node):
             np.ndarray: The current state of the leader robot.
         """
         if self.ros_joint_state is None:
-            print("GET_JOINT_STATE DEBUG: ros_joint_state is None, returning zeros")
             return np.zeros(6)
             
         # Create a dictionary for easy lookup
@@ -320,20 +311,11 @@ class CartesianComplianceControlRobot(Robot, Node):
             zip(self.ros_joint_state.name, self.ros_joint_state.position)
         )
         
-        print(f"GET_JOINT_STATE DEBUG: Available joints: {list(joint_positions_dict.keys())}")
-        print(f"GET_JOINT_STATE DEBUG: Expected order: {self.joint_names_order}")
-        
         # Reorder the joints according to self.joint_names_order
         self.robot_joints = np.array(
             [joint_positions_dict.get(name, 0.0) for name in self.joint_names_order]
         )
-        
-        # Check if any joints are missing
-        missing_joints = [name for name in self.joint_names_order if name not in joint_positions_dict]
-        if missing_joints:
-            print(f"GET_JOINT_STATE DEBUG: WARNING - Missing joints: {missing_joints}")
 
-        print(f"GET_JOINT_STATE DEBUG: Final joint values: {self.robot_joints}")
         return self.robot_joints
 
     def command_joint_state(self, joint_state: np.ndarray) -> None:
@@ -394,25 +376,12 @@ class CartesianComplianceControlRobot(Robot, Node):
         try:
             # Use KDL helper for forward kinematics
             if self.kdl_helper is not None:
-                print(f"FK DEBUG: Computing FK for joints: {joints}")
-                print(f"FK DEBUG: Joint names: {self.kdl_helper.joint_names}")
-                print(f"FK DEBUG: Number of joints in KDL: {self.kdl_helper._num_jnts}")
-                
                 # KDLHelperの正しいメソッド名を使用
                 pose = self.kdl_helper.forward_kinematics(joints.tolist())
                 pos_quat = np.array(pose)  # [x,y,z,qx,qy,qz,qw] format
-                
-                print(f"FK DEBUG: Result - full pose: {pos_quat}")
-                print(f"FK DEBUG: Position: {pos_quat[:3]}")
-                print(f"FK DEBUG: Quaternion: {pos_quat[3:]}")
             else:
-                print("FK DEBUG: KDL helper is None, using zeros")
                 pos_quat = np.zeros(7)
         except Exception as e:
-            print(f"FK DEBUG: Failed to compute FK: {e}")
-            print(f"FK DEBUG: Exception type: {type(e).__name__}")
-            import traceback
-            print(f"FK DEBUG: Traceback: {traceback.format_exc()}")
             self.get_logger().error(f"Failed to compute FK: {e}")
             pos_quat = np.zeros(7)
             
