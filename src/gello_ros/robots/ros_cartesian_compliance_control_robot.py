@@ -40,11 +40,6 @@ class CartesianComplianceControlRobot(Robot, Node):
         self._log_topic_info()
 
         # Initialize publishers
-        self.trajectory_publisher = self.create_publisher(
-            JointTrajectory,
-            self.joint_trajectory_controller_command_topic,
-            1
-        )
         self.cartesian_command_publisher = self.create_publisher(
             PoseStamped,
             self.cartesian_compliance_controller_command_topic,
@@ -133,13 +128,15 @@ class CartesianComplianceControlRobot(Robot, Node):
             try:
                 # Remove leading slash from parameter name
                 param_name = self.robot_description_name.lstrip('/')
+                self.get_logger().info(f"Attempting to get URDF from parameter: {param_name}")
                 urdf_string = self.get_parameter(param_name).get_parameter_value().string_value
-                self.get_logger().info(f"Retrieved URDF from parameter: {param_name}")
+                self.get_logger().info(f"Retrieved URDF from parameter: {param_name}, length: {len(urdf_string)} chars")
             except Exception as e:
-                self.get_logger().warn(f"Failed to get {param_name} parameter: {e}")
+                self.get_logger().error(f"Failed to get {param_name} parameter: {e}")
                 self.get_logger().info("Proceeding without KDL kinematics initialization")
                 
-            if urdf_string:
+            if urdf_string and len(urdf_string) > 0:
+                self.get_logger().info(f"Initializing KDL with base_link='base_link', ee_link='{self.ee_link}'")
                 self.kdl_helper = KDLHelper(
                     self.get_logger(),
                     urdf_path=None,
@@ -150,10 +147,12 @@ class CartesianComplianceControlRobot(Robot, Node):
                 self.get_logger().info("KDL kinematics initialized successfully")
             else:
                 self.kdl_helper = None
-                self.get_logger().warn("No URDF string available. Proceeding without KDL kinematics.")
+                self.get_logger().error("No URDF string available or empty string. KDL kinematics disabled.")
                 
         except Exception as e:
             self.get_logger().error(f"Failed to initialize KDL kinematics: {e}")
+            import traceback
+            self.get_logger().error(f"Traceback: {traceback.format_exc()}")
             self.kdl_helper = None
 
         # Initialize IK solver
@@ -187,7 +186,6 @@ class CartesianComplianceControlRobot(Robot, Node):
         self.declare_parameter("joint_max_vel", [0.0])
         self.declare_parameter("joint_pos_limits_upper", [0.0])
         self.declare_parameter("joint_pos_limits_lower", [0.0])
-        self.declare_parameter("joint_trajectory_controller_command_topic", "/joint_trajectory_controller/joint_trajectory")
         self.declare_parameter("cartesian_compliance_controller_command_topic", "/cartesian_compliance_controller/target_frame")
         self.declare_parameter("joint_states_topic", "/joint_states")
         self.declare_parameter("feedback_wrench_topic", "/ft_sensor/wrench")
@@ -202,7 +200,6 @@ class CartesianComplianceControlRobot(Robot, Node):
         self.joint_max_vel = self.get_parameter("joint_max_vel").get_parameter_value().double_array_value
         self.joint_pos_limits_upper = self.get_parameter("joint_pos_limits_upper").get_parameter_value().double_array_value
         self.joint_pos_limits_lower = self.get_parameter("joint_pos_limits_lower").get_parameter_value().double_array_value
-        self.joint_trajectory_controller_command_topic = self.get_parameter("joint_trajectory_controller_command_topic").get_parameter_value().string_value
         self.cartesian_compliance_controller_command_topic = self.get_parameter("cartesian_compliance_controller_command_topic").get_parameter_value().string_value
         self.joint_states_topic = self.get_parameter("joint_states_topic").get_parameter_value().string_value
         self.feedback_wrench_topic = self.get_parameter("feedback_wrench_topic").get_parameter_value().string_value
@@ -217,7 +214,6 @@ class CartesianComplianceControlRobot(Robot, Node):
         
         # Publishers
         self.get_logger().info("Publishers:")
-        self.get_logger().info(f"  - {self.joint_trajectory_controller_command_topic}: JointTrajectory")
         self.get_logger().info(f"  - {self.cartesian_compliance_controller_command_topic}: PoseStamped")
         
         # Subscribers
@@ -235,11 +231,18 @@ class CartesianComplianceControlRobot(Robot, Node):
         self.get_logger().info("Key Parameters:")
         self.get_logger().info(f"  - ee_link: {self.ee_link}")
         self.get_logger().info(f"  - joint_names_order: {self.joint_names_order}")
+        self.get_logger().info(f"  - robot_description_name: {self.robot_description_name}")
         self.get_logger().info("================================================================")
 
     def joint_states_callback(self, msg: JointState):
         """Joint states callback"""
-        print(f"JOINT_STATE DEBUG: Received joint states - names: {msg.name[:3]}..., positions: {msg.position[:3] if msg.position else 'None'}...")
+        if len(msg.name) > 0:
+            print(f"JOINT_STATE DEBUG: Received {len(msg.name)} joints:")
+            print(f"  Names: {msg.name}")
+            print(f"  Positions: {msg.position[:len(msg.name)] if msg.position else 'None'}")
+            print(f"  Expected order: {self.joint_names_order}")
+        else:
+            print("JOINT_STATE DEBUG: Empty joint state received")
         self.ros_joint_state = msg
 
     def wrench_callback(self, msg: WrenchStamped):
@@ -264,17 +267,28 @@ class CartesianComplianceControlRobot(Robot, Node):
             np.ndarray: The current state of the leader robot.
         """
         if self.ros_joint_state is None:
+            print("GET_JOINT_STATE DEBUG: ros_joint_state is None, returning zeros")
             return np.zeros(6)
             
         # Create a dictionary for easy lookup
         joint_positions_dict = dict(
             zip(self.ros_joint_state.name, self.ros_joint_state.position)
         )
+        
+        print(f"GET_JOINT_STATE DEBUG: Available joints: {list(joint_positions_dict.keys())}")
+        print(f"GET_JOINT_STATE DEBUG: Expected order: {self.joint_names_order}")
+        
         # Reorder the joints according to self.joint_names_order
         self.robot_joints = np.array(
             [joint_positions_dict.get(name, 0.0) for name in self.joint_names_order]
         )
+        
+        # Check if any joints are missing
+        missing_joints = [name for name in self.joint_names_order if name not in joint_positions_dict]
+        if missing_joints:
+            print(f"GET_JOINT_STATE DEBUG: WARNING - Missing joints: {missing_joints}")
 
+        print(f"GET_JOINT_STATE DEBUG: Final joint values: {self.robot_joints}")
         return self.robot_joints
 
     def command_joint_state(self, joint_state: np.ndarray) -> None:
@@ -288,7 +302,11 @@ class CartesianComplianceControlRobot(Robot, Node):
             if self.kdl_helper is None:
                 self.get_logger().warn("KDL helper not available. Cannot command joint state.")
                 return
-            pos, quat = self.kdl_helper.fk(joint_state.tolist())
+            
+            # KDLHelperの正しいメソッド名を使用
+            pose = self.kdl_helper.forward_kinematics(joint_state.tolist())
+            pos = pose[:3]
+            quat = pose[3:]
             
             pose_stamped = PoseStamped()
             pose_stamped.header.stamp = self.get_clock().now().to_msg()
@@ -331,11 +349,25 @@ class CartesianComplianceControlRobot(Robot, Node):
         try:
             # Use KDL helper for forward kinematics
             if self.kdl_helper is not None:
-                pos, quat = self.kdl_helper.fk(joints.tolist())
-                pos_quat = np.concatenate([pos, quat])
+                print(f"FK DEBUG: Computing FK for joints: {joints}")
+                print(f"FK DEBUG: Joint names: {self.kdl_helper.joint_names}")
+                print(f"FK DEBUG: Number of joints in KDL: {self.kdl_helper._num_jnts}")
+                
+                # KDLHelperの正しいメソッド名を使用
+                pose = self.kdl_helper.forward_kinematics(joints.tolist())
+                pos_quat = np.array(pose)  # [x,y,z,qx,qy,qz,qw] format
+                
+                print(f"FK DEBUG: Result - full pose: {pos_quat}")
+                print(f"FK DEBUG: Position: {pos_quat[:3]}")
+                print(f"FK DEBUG: Quaternion: {pos_quat[3:]}")
             else:
+                print("FK DEBUG: KDL helper is None, using zeros")
                 pos_quat = np.zeros(7)
         except Exception as e:
+            print(f"FK DEBUG: Failed to compute FK: {e}")
+            print(f"FK DEBUG: Exception type: {type(e).__name__}")
+            import traceback
+            print(f"FK DEBUG: Traceback: {traceback.format_exc()}")
             self.get_logger().error(f"Failed to compute FK: {e}")
             pos_quat = np.zeros(7)
             
@@ -357,10 +389,14 @@ class CartesianComplianceControlRobot(Robot, Node):
         # Get Jacobian using KDL helper
         try:
             if self.kdl_helper is not None:
+                print(f"JACOBIAN DEBUG: Computing Jacobian for joints: {joints}")
                 jacobian = self.kdl_helper.jacobian(joints.tolist())
+                print(f"JACOBIAN DEBUG: Result shape: {jacobian.shape}")
             else:
+                print("JACOBIAN DEBUG: KDL helper is None, using zeros")
                 jacobian = np.zeros((6, 6))
         except Exception as e:
+            print(f"JACOBIAN DEBUG: Failed to compute Jacobian: {e}")
             self.get_logger().error(f"Failed to compute Jacobian: {e}")
             jacobian = np.zeros((6, 6))
 
