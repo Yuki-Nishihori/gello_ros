@@ -63,14 +63,17 @@ class CartesianComplianceControlRobot(Robot, Node):
         # Initialize variables
         self.ros_joint_state = None
         self._wrench = None
+        
+        # 安全機能: 最後に有効だったjoint state
+        self._last_valid_joint_state = None
 
         # Wait for joint states
         self.get_logger().info(f"Waiting for joint states on topic: {self.joint_states_topic}")
         start_time = time.time()
         while self.ros_joint_state is None and rclpy.ok():
             if time.time() - start_time > 5:
-                self.get_logger().error(f"Timeout waiting for joint_states_topic: {self.joint_states_topic}. Exiting.")
-                raise TimeoutError("Joint states timeout")
+                self.get_logger().error(f"Timeout waiting for joint_states_topic: {self.joint_states_topic}. システムを終了します。")
+                exit(1)  # 強制終了
             rclpy.spin_once(self, timeout_sec=0.1)
 
         # Wait for wrench feedback
@@ -282,6 +285,12 @@ class CartesianComplianceControlRobot(Robot, Node):
     def joint_states_callback(self, msg: JointState):
         """Joint states callback"""
         self.ros_joint_state = msg
+        
+        # 有効なjoint stateを保存
+        if msg.position and len(msg.position) >= 6:
+            joint_positions_dict = dict(zip(msg.name, msg.position))
+            joints = np.array([joint_positions_dict.get(name, 0.0) for name in self.joint_names_order])
+            self._last_valid_joint_state = joints.copy()
 
     def wrench_callback(self, msg: WrenchStamped):
         """Wrench feedback callback"""
@@ -304,7 +313,12 @@ class CartesianComplianceControlRobot(Robot, Node):
             np.ndarray: The current state of the leader robot.
         """
         if self.ros_joint_state is None:
-            return np.zeros(6)
+            if self._last_valid_joint_state is not None:
+                self.get_logger().debug("Joint statesが一時的に利用できません。最後の有効な値を使用します。")
+                return self._last_valid_joint_state.copy()
+            else:
+                self.get_logger().error("Joint statesが受信されていません。システムを強制終了します。")
+                exit(1)  # 強制終了
             
         # Create a dictionary for easy lookup
         joint_positions_dict = dict(
@@ -403,14 +417,10 @@ class CartesianComplianceControlRobot(Robot, Node):
         # Get Jacobian using KDL helper
         try:
             if self.kdl_helper is not None:
-                print(f"JACOBIAN DEBUG: Computing Jacobian for joints: {joints}")
                 jacobian = self.kdl_helper.jacobian(joints.tolist())
-                print(f"JACOBIAN DEBUG: Result shape: {jacobian.shape}")
             else:
-                print("JACOBIAN DEBUG: KDL helper is None, using zeros")
                 jacobian = np.zeros((6, 6))
         except Exception as e:
-            print(f"JACOBIAN DEBUG: Failed to compute Jacobian: {e}")
             self.get_logger().error(f"Failed to compute Jacobian: {e}")
             jacobian = np.zeros((6, 6))
 
@@ -421,11 +431,11 @@ class CartesianComplianceControlRobot(Robot, Node):
                 quat_norm = np.linalg.norm(quat)
                 
                 if quat_norm < 1e-6:  # ゼロノルムの場合
-                    self.get_logger().warn("受信したクォータニオンがゼロノルムです。デフォルト値を設定します。")
-                    quat = np.array([0.0, 0.0, 0.0, 1.0])  # 単位クォータニオン
-                else:
-                    # 正規化
-                    quat = quat / quat_norm
+                    self.get_logger().error("KDLからゼロノルムクォータニオンが返されました。Joint states取得に問題があります。")
+                    exit(1)  # 強制終了
+                
+                # 正規化
+                quat = quat / quat_norm
                 
                 rotation = R.from_quat(quat)  # x,y,z,w format
                 rot_matrix = rotation.as_matrix()
