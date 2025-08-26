@@ -49,6 +49,9 @@ class TouchAgent(Agent, Node):
         self._setup_parameters()
         self._setup_ros_communications()
         self._setup_tf()
+        
+        # Topic一覧を表示
+        self._log_topic_info()
 
         # Touchデバイスからの最初のポーズメッセージを待つ
         self._wait_for_first_pose()
@@ -83,13 +86,13 @@ class TouchAgent(Agent, Node):
         """PublisherとSubscriberを初期化します。"""
         # Publisher
         self.force_feedback_vis_pub = self.create_publisher(
-            WrenchStamped, "force_feedback_vis", 10
+            WrenchStamped, "touch_debug_force_feedback_rviz", 10
         )
         self.force_feedback_pub = self.create_publisher(
             TouchFeedback, self.force_feedback_topic, 10
         )
         self.touch_debug_action_pose_pub = self.create_publisher(
-            PoseStamped, "touch_debug_action_pose", 10
+            PoseStamped, "touch_debug_action_pose_rviz", 10
         )
         # Subscriber
         self.pose_sub = self.create_subscription(
@@ -98,11 +101,36 @@ class TouchAgent(Agent, Node):
         self.button_sub = self.create_subscription(
             TouchButtonEvent, self.button_topic, self.button_callback, 10
         )
+        
+        self.get_logger().info(f"Subscription created for {self.button_topic}")
+        self.get_logger().info(f"Subscription created for {self.ee_pose_topic}")
 
     def _setup_tf(self) -> None:
         """TF2のBufferとListenerを初期化します。"""
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
+
+    def _log_topic_info(self) -> None:
+        """Publisherとsubscriberのtopic一覧をログ出力します。"""
+        self.get_logger().info("=== TouchAgent Topic Configuration ===")
+        
+        # Publishers
+        self.get_logger().info("Publishers:")
+        self.get_logger().info(f"  - force_feedback_vis: WrenchStamped")
+        self.get_logger().info(f"  - {self.force_feedback_topic}: TouchFeedback")
+        self.get_logger().info(f"  - touch_debug_action_pose: PoseStamped")
+        
+        # Subscribers
+        self.get_logger().info("Subscribers:")
+        self.get_logger().info(f"  - {self.ee_pose_topic}: PoseStamped")
+        self.get_logger().info(f"  - {self.button_topic}: TouchButtonEvent")
+        
+        # Parameters
+        self.get_logger().info("Key Parameters:")
+        self.get_logger().info(f"  - teleoperation_mode: {self.teleop_mode}")
+        self.get_logger().info(f"  - touch_base_frame: {self.touch_base_frame}")
+        self.get_logger().info(f"  - feedback_wrench_sensor_frame: {self.feedback_wrench_sensor_frame}")
+        self.get_logger().info("=======================================")
 
     def _wait_for_first_pose(self) -> None:
         """指定したトピックから最初のPoseメッセージが届くまで待機します。"""

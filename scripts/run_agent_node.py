@@ -449,8 +449,23 @@ class AgentNode(Node):
                         )
                 else:
                     step_st = time.time()
+                    
+                    # TouchAgentの場合はspinを実行してコールバックを処理
+                    if self.agent_type == "touch":
+                        rclpy.spin_once(self.agent, timeout_sec=0.001)
+                    
+                    # agent.act() timing
+                    act_start = time.time()
                     action = self.agent.act(self.obs)
+                    act_time = (time.time() - act_start) * 1000
+                    
+                    # env.step() timing
+                    step_start = time.time()
                     self.obs = self.env.step(action)
+                    step_time = (time.time() - step_start) * 1000
+                    
+                    total_time = (time.time() - step_st) * 1000
+                    print(f"Timing: act={act_time:.1f}ms, step={step_time:.1f}ms, total={total_time:.1f}ms")
                     message = f"\rTime passed: {round(time.time() - start_time, 2)},\tTime for step: {round((time.time() - step_st)*1000,1)} ms   "
                     print_color(
                         message,
