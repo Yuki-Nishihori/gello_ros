@@ -36,6 +36,9 @@ class CartesianImpedanceControlRobot(Robot, Node):
         # Get parameters
         self.get_parameters()
 
+        # Log topic configuration
+        self._log_topic_info()
+
         # Initialize publishers
         self.trajectory_publisher = self.create_publisher(
             JointTrajectory,
@@ -65,23 +68,26 @@ class CartesianImpedanceControlRobot(Robot, Node):
         # Initialize variables
         self.ros_joint_state = None
         self._wrench = None
+        
+        # 安全機能: 最後に有効だったjoint state
+        self._last_valid_joint_state = None
 
         # Wait for joint states
-        self.get_logger().info("Waiting for joint states...")
+        self.get_logger().info(f"Waiting for joint states on topic: {self.joint_states_topic}")
         start_time = time.time()
         while self.ros_joint_state is None and rclpy.ok():
             if time.time() - start_time > 5:
-                self.get_logger().error("Timeout waiting for joint_states_topic. Exiting.")
-                raise TimeoutError("Joint states timeout")
+                self.get_logger().error(f"Timeout waiting for joint_states_topic: {self.joint_states_topic}. システムを終了します。")
+                exit(1)  # 強制終了
             rclpy.spin_once(self, timeout_sec=0.1)
 
         # Wait for wrench feedback
-        self.get_logger().info("Waiting for wrench feedback...")
+        self.get_logger().info(f"Waiting for wrench feedback on topic: {self.feedback_wrench_topic}")
         start_time = time.time()
         while self._wrench is None and rclpy.ok():
             if time.time() - start_time > 5:
-                self.get_logger().error("Timeout waiting for feedback_wrench_topic. Exiting.")
-                raise TimeoutError("Wrench feedback timeout")
+                self.get_logger().error(f"Timeout waiting for feedback_wrench_topic: {self.feedback_wrench_topic}. システムを終了します。")
+                exit(1)  # 強制終了
             rclpy.spin_once(self, timeout_sec=0.1)
 
         # Initialize service client for FT sensor zero reset
@@ -113,10 +119,15 @@ class CartesianImpedanceControlRobot(Robot, Node):
                 base_link="base_link",
                 ee_link=self.ee_link
             )
+            
+            if self.kdl_helper is None:
+                self.get_logger().error("KDL helper初期化に失敗しました。システムを終了します。")
+                exit(1)  # 強制終了
+                
             self.get_logger().info("KDL kinematics initialized successfully")
         except Exception as e:
             self.get_logger().error(f"Failed to initialize KDL kinematics: {e}")
-            raise
+            exit(1)  # 強制終了
 
         # Initialize IK solver
         try:
@@ -151,6 +162,7 @@ class CartesianImpedanceControlRobot(Robot, Node):
         self.declare_parameter("feedback_wrench_topic", "/ft_sensor/wrench")
         self.declare_parameter("feedback_wrench_zero_service", "/ft_sensor/zero")
         self.declare_parameter("ee_link", "tool0")
+        self.declare_parameter("robot_description", "")
 
     def get_parameters(self):
         """Get ROS2 parameters"""
@@ -165,9 +177,27 @@ class CartesianImpedanceControlRobot(Robot, Node):
         self.feedback_wrench_zero_service = self.get_parameter("feedback_wrench_zero_service").get_parameter_value().string_value
         self.ee_link = self.get_parameter("ee_link").get_parameter_value().string_value
 
+    def _log_topic_info(self) -> None:
+        """Publisherとsubscriberのtopic一覧をログ出力します。"""
+        self.get_logger().info("=== CartesianImpedanceControlRobot Topic Configuration ===")
+        self.get_logger().info(f"  - joint_trajectory_controller_command_topic: {self.joint_trajectory_controller_command_topic}")
+        self.get_logger().info(f"  - cartesian_impedance_controller_command_topic: {self.cartesian_impedance_controller_command_topic}")
+        self.get_logger().info(f"  - joint_states_topic: {self.joint_states_topic}")
+        self.get_logger().info(f"  - feedback_wrench_topic: {self.feedback_wrench_topic}")
+        self.get_logger().info(f"  - feedback_wrench_zero_service: {self.feedback_wrench_zero_service}")
+        self.get_logger().info(f"  - ee_link: {self.ee_link}")
+        self.get_logger().info(f"  - joint_names_order: {self.joint_names_order}")
+        self.get_logger().info("================================================================")
+
     def joint_states_callback(self, msg: JointState):
         """Joint states callback"""
         self.ros_joint_state = msg
+        
+        # 有効なjoint stateを保存
+        if msg.position and len(msg.position) >= 6:
+            joint_positions_dict = dict(zip(msg.name, msg.position))
+            joints = np.array([joint_positions_dict.get(name, 0.0) for name in self.joint_names_order])
+            self._last_valid_joint_state = joints.copy()
 
     def wrench_callback(self, msg: WrenchStamped):
         """Wrench feedback callback"""
@@ -190,7 +220,12 @@ class CartesianImpedanceControlRobot(Robot, Node):
             tuple: (positions, velocities, efforts) of the robot joints.
         """
         if self.ros_joint_state is None:
-            return np.zeros(6), np.zeros(6), np.zeros(6)
+            if self._last_valid_joint_state is not None:
+                self.get_logger().debug("Joint statesが一時的に利用できません。最後の有効な値を使用します。")
+                return self._last_valid_joint_state.copy(), np.zeros(6), np.zeros(6)
+            else:
+                self.get_logger().error("Joint statesが受信されていません。システムを強制終了します。")
+                exit(1)  # 強制終了
             
         # Create dictionaries for easy lookup
         joint_positions_dict = dict(
@@ -226,7 +261,14 @@ class CartesianImpedanceControlRobot(Robot, Node):
         """
         try:
             # Use KDL helper for forward kinematics
-            pos, quat = self.kdl_helper.fk(joint_state.tolist())
+            if self.kdl_helper is None:
+                self.get_logger().warn("KDL helper not available. Cannot command joint state.")
+                return
+            
+            # KDLHelperの正しいメソッド名を使用
+            pose = self.kdl_helper.forward_kinematics(joint_state.tolist())
+            pos = pose[:3]
+            quat = pose[3:]
             
             pose_stamped = PoseStamped()
             pose_stamped.header.stamp = self.get_clock().now().to_msg()
@@ -266,13 +308,18 @@ class CartesianImpedanceControlRobot(Robot, Node):
         """Get robot observations including kinematics and sensor data"""
         joint_positions, joint_velocities, joint_efforts = self.get_joint_state()
         
+        # Forward kinematics using KDL helper
         try:
-            # Use KDL helper for forward kinematics
-            pos, quat = self.kdl_helper.fk(joint_positions.tolist())
-            pos_quat = np.concatenate([pos, quat])
+            if self.kdl_helper is not None:
+                # KDLHelperの正しいメソッド名を使用
+                pose = self.kdl_helper.forward_kinematics(joint_positions.tolist())
+                pos_quat = np.array(pose)  # [x,y,z,qx,qy,qz,qw] format
+            else:
+                self.get_logger().error("KDL helper is None")
+                exit(1)  # 強制終了
         except Exception as e:
             self.get_logger().error(f"Failed to compute FK: {e}")
-            pos_quat = np.zeros(7)
+            exit(1)  # 強制終了
             
         gripper_pos = np.array([joint_positions[-1]]) if len(joint_positions) > 0 else np.array([0.0])
 
@@ -291,7 +338,10 @@ class CartesianImpedanceControlRobot(Robot, Node):
 
         # Get Jacobian using KDL helper
         try:
-            jacobian = self.kdl_helper.jacobian(joint_positions.tolist())
+            if self.kdl_helper is not None:
+                jacobian = self.kdl_helper.jacobian(joint_positions.tolist())
+            else:
+                jacobian = np.zeros((6, 6))
         except Exception as e:
             self.get_logger().error(f"Failed to compute Jacobian: {e}")
             jacobian = np.zeros((6, 6))
@@ -299,16 +349,25 @@ class CartesianImpedanceControlRobot(Robot, Node):
         # Convert quaternion to rotation matrix and euler angles
         if len(pos_quat) >= 7:
             try:
-                rotation = R.from_quat(pos_quat[3:7])  # x,y,z,w format
+                quat = pos_quat[3:7]
+                quat_norm = np.linalg.norm(quat)
+                
+                if quat_norm < 1e-6:  # ゼロノルムの場合
+                    self.get_logger().error("KDLからゼロノルムクォータニオンが返されました。Joint states取得に問題があります。")
+                    exit(1)  # 強制終了
+                
+                # 正規化
+                quat = quat / quat_norm
+                
+                rotation = R.from_quat(quat)  # x,y,z,w format
                 rot_matrix = rotation.as_matrix()
                 euler_angles = rotation.as_euler('xyz')
             except Exception as e:
                 self.get_logger().error(f"Failed to convert quaternion: {e}")
-                rot_matrix = np.eye(3)
-                euler_angles = np.zeros(3)
+                exit(1)  # 強制終了
         else:
-            rot_matrix = np.eye(3)
-            euler_angles = np.zeros(3)
+            self.get_logger().error("Invalid pose data from KDL")
+            exit(1)  # 強制終了
 
         return {
             "joint_positions": joint_positions,
