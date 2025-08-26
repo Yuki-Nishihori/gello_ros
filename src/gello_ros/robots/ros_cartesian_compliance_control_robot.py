@@ -36,6 +36,9 @@ class CartesianComplianceControlRobot(Robot, Node):
         # Get parameters
         self.get_parameters()
 
+        # Log topic configuration
+        self._log_topic_info()
+
         # Initialize publishers
         self.trajectory_publisher = self.create_publisher(
             JointTrajectory,
@@ -208,12 +211,40 @@ class CartesianComplianceControlRobot(Robot, Node):
         self.ee_link = self.get_parameter("ee_link").get_parameter_value().string_value
         self.robot_description_name = self.get_parameter("robot_description_name").get_parameter_value().string_value
 
+    def _log_topic_info(self) -> None:
+        """Log publisher and subscriber topic information."""
+        self.get_logger().info("=== CartesianComplianceControlRobot Topic Configuration ===")
+        
+        # Publishers
+        self.get_logger().info("Publishers:")
+        self.get_logger().info(f"  - {self.joint_trajectory_controller_command_topic}: JointTrajectory")
+        self.get_logger().info(f"  - {self.cartesian_compliance_controller_command_topic}: PoseStamped")
+        
+        # Subscribers
+        self.get_logger().info("Subscribers:")
+        self.get_logger().info(f"  - {self.joint_states_topic}: JointState")
+        self.get_logger().info(f"  - {self.feedback_wrench_topic}: WrenchStamped")
+        
+        # Services
+        self.get_logger().info("Service Clients:")
+        if hasattr(self, 'compliance_control_wrench_zero_service'):
+            self.get_logger().info(f"  - {self.compliance_control_wrench_zero_service}: Empty")
+        self.get_logger().info(f"  - {self.feedback_wrench_zero_service}: Empty")
+        
+        # Parameters
+        self.get_logger().info("Key Parameters:")
+        self.get_logger().info(f"  - ee_link: {self.ee_link}")
+        self.get_logger().info(f"  - joint_names_order: {self.joint_names_order}")
+        self.get_logger().info("================================================================")
+
     def joint_states_callback(self, msg: JointState):
         """Joint states callback"""
+        print(f"JOINT_STATE DEBUG: Received joint states - names: {msg.name[:3]}..., positions: {msg.position[:3] if msg.position else 'None'}...")
         self.ros_joint_state = msg
 
     def wrench_callback(self, msg: WrenchStamped):
         """Wrench feedback callback"""
+        print(f"WRENCH DEBUG: Received wrench - force: [{msg.wrench.force.x:.3f}, {msg.wrench.force.y:.3f}, {msg.wrench.force.z:.3f}]")
         self._wrench = msg
 
     def num_dofs(self) -> int:
