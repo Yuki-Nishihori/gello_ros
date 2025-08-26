@@ -1,6 +1,7 @@
-reference_frame: "touch_base"
-units: "mm"
-publish_rate: 1000
-prefix: "touch"
-device_name: "Default Device"
-robot_description_name: "touch_robot_description"
+
+/**:
+  ros__parameters:
+    reference_frame: "touch_base"
+    units: "mm"
+    publish_rate: 1000
+    device_name: "Default Device"

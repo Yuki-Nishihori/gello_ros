@@ -1,33 +1,36 @@
-# operation config
-control_hz: 500
-touch_ee_pose_topic:  "/touch/tip_pose"
-touch_button_topic: "/touch/button"
-touch_force_feedback_topic: "/touch/force_feedback"
-controller_type: "cartesian_compliance_controller" # "joint_trajectory_controller" or "cartesian_compliance_controller"
-compliance_control_wrench_zero_service: "/wrench/filtered/zero_ftsensor"
-feedback_wrench_topic: "/leptrino/wrench/filtered"
-feedback_wrench_zero_service: "/leptrino/wrench/filtered/zero_ftsensor"
-teleoperation_mode: "bilateral" # "unilateral" or "bilateral"
-use_gripper: False
-use_FT_sensor: True
-touch_max_force: 3.3
-force_scale_to_touch: 0.8
+/**:
+  ros__parameters:
+    # operation config
+    control_hz: 500
+    touch_ee_pose_topic:  "/touch/tip_pose"
+    touch_button_topic: "/touch/button"
+    touch_force_feedback_topic: "/touch/force_feedback"
+    touch_base_frame: "touch_base"
+    compliance_control_wrench_zero_service: "/ft_sensor_wrench_filtered/zero_ftsensor"
+    feedback_wrench_sensor_frame: "tool0"
+    feedback_wrench_topic: "/ft_sensor_wrench"
+    feedback_wrench_zero_service: "/ft_sensor_wrench_filtered/zero_ftsensor"
+    teleoperation_mode: "bilateral" # "unilateral" or "bilateral"
+    use_gripper: False
+    use_FT_sensor: True
+    touch_max_force: 3.3
+    force_scale_to_touch: 0.8
 
 
-# camera config
-camera_names: ["bottom"] # "base" or "side" or "bottom"
-camera_width: 640
-camera_height: 480
-camera_fps: 30
+    # camera config
+    camera_names: ["bottom"] # "base" or "side" or "bottom"
+    camera_width: 640
+    camera_height: 480
+    camera_fps: 30
 
-# imitation learning config
-task_name: "grinding_test"
-save_episode_dir: "/root/onolab/catkin_ws/src/gello_ros/scripts/episode_data"
-eval_ckpt_dir: "/root/onolab/catkin_ws/src/gello_ros/scripts/checkpoints/20250311_095946_grinding_test"
-number_of_episodes: 10 # trials
-number_of_steps: 20000 # steps for each episode
-control_mode: "cartesian" # "joints" or "cartesian"
-pose_representation: "euler" # "euler" or "rotation_matrix"
-state_dim: 12
-action_dim: 12
-wrench_dim: 6
+    # imitation learning config
+    task_name: "grinding_test"
+    save_episode_dir: "/home/ros/onolab_ros2/ros2_ws/src/gello_ros/scripts/episode_data"
+    eval_ckpt_dir: "/home/ros/onolab_ros2/ros2_ws/src/gello_ros/scripts/checkpoints/20250311_095946_grinding_test"
+    number_of_episodes: 10 # trials
+    number_of_steps: 20000 # steps for each episode
+    control_mode: "cartesian" # "joint" or "cartesian"
+    pose_representation: "euler" # "euler" or "rotation_matrix"
+    state_dim: 12
+    action_dim: 12
+    wrench_dim: 6

@@ -1,52 +1,80 @@
-import rclpy
-from rclpy.node import Node
-from sensor_msgs.msg import Image
-from cv_bridge import CvBridge
+from pathlib import Path
+from typing import Optional, Protocol, Tuple
 
-from typing import Optional, Tuple
-from camera_driver import DummyCamera, SavedCamera  # 上のコードのクラスを含むモジュール名に合わせてください
+import numpy as np
 
 
-class CameraPublisher(Node):
-    def __init__(self):
-        super().__init__('camera_publisher')
-        self.declare_parameter('camera_type', 'dummy')
-        self.declare_parameter('img_size', [480, 640])
+class CameraDriver(Protocol):
+    """Camera protocol.
 
-        cam_type = self.get_parameter('camera_type').value
-        img_size = tuple(self.get_parameter('img_size').value)
+    A protocol for a camera driver. This is used to abstract the camera from the rest of the code.
+    """
 
-        if cam_type == 'dummy':
-            self.camera = DummyCamera()
-        elif cam_type == 'saved':
-            self.camera = SavedCamera()
+    def read(
+        self,
+    ) -> Tuple[np.ndarray]:
+        """Read a frame from the camera.
+
+        Args:
+            img_size: The size of the image to return. If None, the original size is returned.
+            farthest: The farthest distance to map to 255.
+
+        Returns:
+            np.ndarray: The color image.
+            np.ndarray: The depth image.
+        """
+
+
+class DummyCamera(CameraDriver):
+    """A dummy camera for testing."""
+
+    def read(
+        self,
+        img_size: Optional[Tuple[int, int]] = None,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Read a frame from the camera.
+
+        Args:
+            img_size: The size of the image to return. If None, the original size is returned.
+            farthest: The farthest distance to map to 255.
+
+        Returns:
+            np.ndarray: The color image.
+            np.ndarray: The depth image.
+        """
+        if img_size is None:
+            return (
+                np.random.randint(255, size=(480, 640, 3), dtype=np.uint8),
+                np.random.randint(255, size=(480, 640, 1), dtype=np.uint16),
+            )
         else:
-            raise ValueError(f"Unknown camera type: {cam_type}")
-
-        self.bridge = CvBridge()
-
-        self.color_pub = self.create_publisher(Image, '/camera/color', 10)
-        self.depth_pub = self.create_publisher(Image, '/camera/depth', 10)
-
-        self.timer = self.create_timer(1.0 / 10.0, self.publish_images)  # 10 Hz
-
-        self.get_logger().info(f"CameraPublisher started with {cam_type} camera.")
-
-    def publish_images(self):
-        color_img, depth_img = self.camera.read()
-        color_msg = self.bridge.cv2_to_imgmsg(color_img, encoding='rgb8')
-        depth_msg = self.bridge.cv2_to_imgmsg(depth_img, encoding='mono16')
-
-        self.color_pub.publish(color_msg)
-        self.depth_pub.publish(depth_msg)
+            return (
+                np.random.randint(
+                    255, size=(img_size[0], img_size[1], 3), dtype=np.uint8
+                ),
+                np.random.randint(
+                    255, size=(img_size[0], img_size[1], 1), dtype=np.uint16
+                ),
+            )
 
 
-def main(args=None):
-    rclpy.init(args=args)
-    node = CameraPublisher()
-    try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
-    node.destroy_node()
-    rclpy.shutdown()
+class SavedCamera(CameraDriver):
+    def __init__(self, path: str = "example"):
+        self.path = str(Path(__file__).parent / path)
+        from PIL import Image
+
+        self._color_img = Image.open(f"{self.path}/image.png")
+        self._depth_img = Image.open(f"{self.path}/depth.png")
+
+    def read(
+        self,
+        img_size: Optional[Tuple[int, int]] = None,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        if img_size is not None:
+            color_img = self._color_img.resize(img_size)
+            depth_img = self._depth_img.resize(img_size)
+        else:
+            color_img = self._color_img
+            depth_img = self._depth_img
+
+        return np.array(color_img), np.array(depth_img)[:, :, 0:1]
