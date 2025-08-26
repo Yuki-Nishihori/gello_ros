@@ -57,10 +57,12 @@ class TouchAgent(Agent, Node):
         """ROSパラメータを宣言し、読み込みます。"""
         self.declare_parameter("touch_ee_pose_topic", "/touch/ee_pose")
         self.declare_parameter("touch_button_topic", "/touch/button_event")
-        self.declare_parameter("touch_force_feedback_topic", "force_feedback")
+        self.declare_parameter("touch_force_feedback_topic", "/touch/force_feedback")
         self.declare_parameter("touch_max_force", 1.5)
         self.declare_parameter("force_scale_to_touch", 1.0)
         self.declare_parameter("teleoperation_mode", "unilateral")
+        self.declare_parameter("touch_base_frame", "touch_base")
+        self.declare_parameter("feedback_wrench_sensor_frame", "tool0")
 
         self.ee_pose_topic = self.get_parameter("touch_ee_pose_topic").get_parameter_value().string_value
         self.button_topic = self.get_parameter("touch_button_topic").get_parameter_value().string_value
@@ -68,6 +70,8 @@ class TouchAgent(Agent, Node):
         self.touch_max_force = self.get_parameter("touch_max_force").get_parameter_value().double_value
         self.force_scale_to_touch = self.get_parameter("force_scale_to_touch").get_parameter_value().double_value
         self.teleop_mode = self.get_parameter("teleoperation_mode").get_parameter_value().string_value
+        self.touch_base_frame = self.get_parameter("touch_base_frame").get_parameter_value().string_value
+        self.feedback_wrench_sensor_frame = self.get_parameter("feedback_wrench_sensor_frame").get_parameter_value().string_value
 
         if self.teleop_mode not in ["unilateral", "bilateral"]:
             self.get_logger().error(f"無効な通信モードです: {self.teleop_mode}。終了します。")
@@ -83,6 +87,9 @@ class TouchAgent(Agent, Node):
         )
         self.force_feedback_pub = self.create_publisher(
             TouchFeedback, self.force_feedback_topic, 10
+        )
+        self.touch_debug_action_pose_pub = self.create_publisher(
+            PoseStamped, "touch_debug_action_pose", 10
         )
         # Subscriber
         self.pose_sub = self.create_subscription(
@@ -139,43 +146,53 @@ class TouchAgent(Agent, Node):
         レンチ（力とトルク）を指定された座標系に変換し、フィードバックメッセージを作成します。
 
         Args:
-            wrench_array: [fx, fy, fz, tx, ty, tz] 形式のレンチ配列。
-            transform: 適用する座標変換。
+            wrench_array: [fx, fy, fz, tx, ty, tz] 形式のレンチ配列 (tool0座標系)。
+            transform: base_linkからtool0への座標変換。
 
         Returns:
             RViz可視化用のWrenchStampedと、Touchデバイス用のTouchFeedbackのタプル。
         """
+        # 1. 観測されたレンチをスケーリングし、最大値でクリッピングする
         scaled_wrench = wrench_array * self.force_scale_to_touch
-        
-        # 最大値でクリッピング
         force_in_tool = np.clip(scaled_wrench[:3], -self.touch_max_force, self.touch_max_force)
         torque_in_tool = np.clip(scaled_wrench[3:], -self.touch_max_force, self.touch_max_force)
 
+        # 2. RVizでの可視化のために、レンチを base_link 座標系に変換する
         # 変換用の回転行列と並進ベクトルを取得
         rotation_matrix = R.from_quat([
             transform.transform.rotation.x, transform.transform.rotation.y,
             transform.transform.rotation.z, transform.transform.rotation.w
         ]).as_matrix()
         
-        translation_vector = np.array([
+        # lookup_transform("base_link", "tool0")で得られる並進ベクトルは、
+        # base_linkから見たtool0の位置ベクトル
+        translation_vector_in_base = np.array([
             transform.transform.translation.x,
             transform.transform.translation.y,
             transform.transform.translation.z
         ])
 
-        # 座標変換
+        # 座標変換の計算
         force_in_base = rotation_matrix @ force_in_tool
-        torque_in_base = rotation_matrix @ torque_in_tool + np.cross(translation_vector, force_in_base)
+        # トルクの変換: T_base = R @ T_tool + P_base_tool x F_base
+        torque_in_base = rotation_matrix @ torque_in_tool + np.cross(translation_vector_in_base, force_in_base)
 
-        # RViz可視化用メッセージ
+        # 3. RViz可視化用メッセージ (base_link 座標系) を作成
         wrench_vis_msg = WrenchStamped()
-        wrench_vis_msg.header.frame_id = "touch_force"  # このフレームはTFで定義されている想定
+        wrench_vis_msg.header.stamp = self.get_clock().now().to_msg()
+        # frame_idは可視化する座標系に合わせるのが一般的
+        wrench_vis_msg.header.frame_id = "base_link"
         wrench_vis_msg.wrench.force.x, wrench_vis_msg.wrench.force.y, wrench_vis_msg.wrench.force.z = force_in_base
         wrench_vis_msg.wrench.torque.x, wrench_vis_msg.wrench.torque.y, wrench_vis_msg.wrench.torque.z = torque_in_base
 
-        # Touchフィードバック用メッセージ
+        # 4. Touchデバイスへのフィードバック用メッセージを作成
         feedback_msg = TouchFeedback()
-        feedback_msg.force.x, feedback_msg.force.y, feedback_msg.force.z = force_in_base
+        
+        # --- ここが重要な変更点 ---
+        # 力覚フィードバックは、ユーザーが感じる力の方向と一致させるため、
+        # 座標変換前の「ツール座標系」の力 (force_in_tool) を使用します。
+        # これにより、ロボットの先端が受けた力をそのまま直感的に感じることができます。
+        feedback_msg.force.x, feedback_msg.force.y, feedback_msg.force.z = force_in_tool
 
         return wrench_vis_msg, feedback_msg
     
@@ -225,14 +242,36 @@ class TouchAgent(Agent, Node):
         # --- 力覚フィードバックの計算と送信 ---
         if self.teleop_mode == "bilateral":
             try:
-                # 正しいROS2のAPIを使用
-                transform = self.tf_buffer.lookup_transform("base_link", "tool0", tf2_ros.Time(), timeout=Duration(seconds=1.0))
+                # パラメータで指定されたフレーム名を使用してTF変換を実行
+                transform = self.tf_buffer.lookup_transform(
+                    self.touch_base_frame, 
+                    self.feedback_wrench_sensor_frame, 
+                    tf2_ros.Time(), 
+                    timeout=Duration(seconds=1.0)
+                )
                 wrench_vis, wrench_feedback = self.transform_wrench(obs["ee_wrench"], transform)
                 
                 self.force_feedback_vis_pub.publish(wrench_vis)
                 self.force_feedback_pub.publish(wrench_feedback)
             except tf2_ros.TransformException as ex:
-                self.get_logger().warning(f"TF変換に失敗しました: {ex}")
+                # TF変換に失敗した場合（ダミーコントローラー等）は、単位変換を使用
+                self.get_logger().debug(f"TF変換に失敗しました（{self.touch_base_frame} -> {self.feedback_wrench_sensor_frame}）、単位変換を使用します: {ex}")
+                try:
+                    # 単位変換を作成
+                    from geometry_msgs.msg import TransformStamped, Transform, Vector3, Quaternion
+                    identity_transform = TransformStamped()
+                    identity_transform.header.frame_id = self.touch_base_frame
+                    identity_transform.child_frame_id = self.feedback_wrench_sensor_frame
+                    identity_transform.header.stamp = self.get_clock().now().to_msg()
+                    identity_transform.transform.translation = Vector3(x=0.0, y=0.0, z=0.0)
+                    identity_transform.transform.rotation = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
+                    
+                    wrench_vis, wrench_feedback = self.transform_wrench(obs["ee_wrench"], identity_transform)
+                    
+                    self.force_feedback_vis_pub.publish(wrench_vis)
+                    self.force_feedback_pub.publish(wrench_feedback)
+                except Exception as e:
+                    self.get_logger().debug(f"力覚フィードバック処理でエラーが発生しました: {e}")
         
         # --- テレオペレーションの状態遷移 ---
         # 白ボタンが押された瞬間
@@ -280,6 +319,20 @@ class TouchAgent(Agent, Node):
             "ee_rot_matrix": R.from_quat(target_quat).as_matrix(),
             "ee_euler": R.from_quat(target_quat).as_euler('xyz')
         }
+        
+        # デバッグ用にtouch_debug_action_poseをpublish
+        debug_pose_msg = PoseStamped()
+        debug_pose_msg.header.stamp = self.get_clock().now().to_msg()
+        debug_pose_msg.header.frame_id = "base_link"
+        debug_pose_msg.pose.position.x = float(target_pose[0])
+        debug_pose_msg.pose.position.y = float(target_pose[1])
+        debug_pose_msg.pose.position.z = float(target_pose[2])
+        debug_pose_msg.pose.orientation.x = float(target_quat[0])
+        debug_pose_msg.pose.orientation.y = float(target_quat[1])
+        debug_pose_msg.pose.orientation.z = float(target_quat[2])
+        debug_pose_msg.pose.orientation.w = float(target_quat[3])
+        self.touch_debug_action_pose_pub.publish(debug_pose_msg)
+        
         return action_dict
 
 
