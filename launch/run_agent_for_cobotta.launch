@@ -1,0 +1,29 @@
+<launch>
+  <arg name="robot_config" default="$(find gello_ros)/config/cobotta.yaml" />
+  <arg name="common_config" default="$(find gello_ros)/config/common.yaml" />
+  <arg name="save_episode" default="false" />
+  <arg name="node_start_delay" default="5.0" />
+  <arg name="agent_type" default="gello" />
+  <arg name="controller_type" default="joint_trajectory_controller" doc="Controller type: joint_trajectory_controller only (Cobotta)" />
+
+  <node name="gello_camera_server" pkg="gello_ros" type="run_camera_nodes.py" output="screen">
+    <rosparam command="load" file="$(arg robot_config)" />
+    <rosparam command="load" file="$(arg common_config)" />
+  </node>
+
+  <node name="gello_robot_server" pkg="gello_ros" type="run_robot_node.py" output="screen">
+    <rosparam command="load" file="$(arg robot_config)" />
+    <rosparam command="load" file="$(arg common_config)" />
+  </node>
+
+  <node name="gello_agent" pkg="gello_ros" type="run_agent_node.py" output="screen"
+    launch-prefix="bash -c 'sleep $(arg node_start_delay); $0 $@' ">
+    <rosparam command="load" file="$(arg robot_config)" />
+    <rosparam command="load" file="$(arg common_config)" />
+    <param name="save_episode" value="$(arg save_episode)" />
+    <param name="agent_type" value="$(arg agent_type)" />
+    <param name="controller_type" value="$(arg controller_type)" />
+  </node>
+
+
+</launch>

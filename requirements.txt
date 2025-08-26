@@ -18,7 +18,6 @@ torchvision
 torchaudio
 h5py
 einops
-pydantic
 
 # for debugging
 ipython

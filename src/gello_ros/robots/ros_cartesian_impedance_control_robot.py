@@ -1,176 +1,103 @@
 from typing import Dict
 
 import numpy as np
-from scipy.spatial.transform import Rotation as R
 
 from gello_ros.robots.robot import Robot
 
-import rclpy
-from rclpy.node import Node
+import rospy
+from moveit_commander import MoveGroupCommander
 from sensor_msgs.msg import JointState
 from geometry_msgs.msg import PoseStamped, WrenchStamped
 from std_srvs.srv import Empty
+
+from ur_pykdl import ur_kinematics
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
-from kdl_parser_py.kdl_helper import KDLHelper
-from pytracik.trac_ik import TracIK
 import time
+import tf.transformations
 
-
-class CartesianImpedanceControlRobot(Robot, Node):
+class CartesianImpedanceControlRobot(Robot):
     """A class representing a UR robot with Cartesian impedance control."""
 
     def __init__(
         self,
         use_gripper: bool = False,
     ):
-        # Initialize ROS2 node
-        Node.__init__(self, 'cartesian_impedance_control_robot')
-        
         if use_gripper:
-            self.get_logger().error("Only no gripper configuration supported")
-            raise NotImplementedError("Gripper support not implemented")
+            print("supposed only no gripper")
+            exit()
 
-        # Declare ROS2 parameters
-        self._declare_parameters()
-        
-        # Get parameters
-        self.get_parameters()
-
-        # Initialize publishers
-        self.trajectory_publisher = self.create_publisher(
+        self.joint_names_order = rospy.get_param("~joint_names_order")
+        self.joint_max_vel = rospy.get_param("~joint_max_vel")
+        self.joint_pos_limits_upper = rospy.get_param("~joint_pos_limits_upper")
+        self.joint_pos_limits_lower = rospy.get_param("~joint_pos_limits_lower")
+        self.trajectory_publisher = rospy.Publisher(
+            rospy.get_param("~joint_trajectory_controller_command_topic"),
             JointTrajectory,
-            self.joint_trajectory_controller_command_topic,
-            1
+            queue_size=1,
         )
-        self.cartesian_command_publisher = self.create_publisher(
+        self.cartesian_command_publisher = rospy.Publisher(
+            rospy.get_param("~cartesian_impedance_controller_command_topic"),
             PoseStamped,
-            self.cartesian_impedance_controller_command_topic,
-            1
+            queue_size=1,
         )
 
-        # Initialize subscribers
-        self.joint_state_subscription = self.create_subscription(
+        # Wait for joint_states_topic
+        rospy.Subscriber(
+            rospy.get_param("~joint_states_topic"),
             JointState,
-            self.joint_states_topic,
             self.joint_states_callback,
-            1
         )
-        self.wrench_subscription = self.create_subscription(
-            WrenchStamped,
-            self.feedback_wrench_topic,
-            self.wrench_callback,
-            1
-        )
-
-        # Initialize variables
         self.ros_joint_state = None
-        self._wrench = None
-
-        # Wait for joint states
-        self.get_logger().info("Waiting for joint states...")
         start_time = time.time()
-        while self.ros_joint_state is None and rclpy.ok():
-            if time.time() - start_time > 5:
-                self.get_logger().error("Timeout waiting for joint_states_topic. Exiting.")
-                raise TimeoutError("Joint states timeout")
-            rclpy.spin_once(self, timeout_sec=0.1)
+        while self.ros_joint_state is None:
+            if time.time() - start_time > 5: # wait for 5 seconds
+                rospy.logerr(f"Timeout waiting for joint_states_topic. Exiting.")
+                exit()
+            rospy.sleep(0.1)
 
-        # Wait for wrench feedback
-        self.get_logger().info("Waiting for wrench feedback...")
-        start_time = time.time()
-        while self._wrench is None and rclpy.ok():
-            if time.time() - start_time > 5:
-                self.get_logger().error("Timeout waiting for feedback_wrench_topic. Exiting.")
-                raise TimeoutError("Wrench feedback timeout")
-            rclpy.spin_once(self, timeout_sec=0.1)
-
-        # Initialize service client for FT sensor zero reset
-        self.wrench_zero_client = self.create_client(
-            Empty, 
-            self.feedback_wrench_zero_service
+        # Wait for feedback_wrench_topic
+        rospy.Subscriber(
+            rospy.get_param("~feedback_wrench_topic"),
+            WrenchStamped,
+            self.wrench_callback,
         )
+        self._wrench = None
+        start_time = time.time()
+        while self._wrench is None:
+            if time.time() - start_time > 5:
+                rospy.logerr(f"Timeout waiting for feedback_wrench_topic. Exiting.")
+                exit()
+            rospy.sleep(0.1)
         
-        # Wait for service
-        self.get_logger().info("Waiting for wrench zero service...")
-        if not self.wrench_zero_client.wait_for_service(timeout_sec=5.0):
-            self.get_logger().error("Wrench zero service not available")
-            raise TimeoutError("Service timeout")
-        
-        # Call zero reset service
-        self.get_logger().info("Zero reset feedback FT sensor offset")
-        future = self.wrench_zero_client.call_async(Empty.Request())
-        rclpy.spin_until_future_complete(self, future)
-        if future.result() is None:
-            self.get_logger().error("Failed to call wrench zero service")
-        time.sleep(1)
 
-        # Initialize kinematics
+        # Zero reset feedback FT sensor offset
+        wrench_zero_service_name = rospy.get_param("~feedback_wrench_zero_service")
+        rospy.wait_for_service(wrench_zero_service_name)
         try:
-            self.kdl_helper = KDLHelper(
-                self.get_logger(),
-                urdf_path=None,  # Will use robot_description parameter
-                urdf_string=None,
-                base_link="base_link",
-                ee_link=self.ee_link
-            )
-            self.get_logger().info("KDL kinematics initialized successfully")
-        except Exception as e:
-            self.get_logger().error(f"Failed to initialize KDL kinematics: {e}")
-            raise
+            self.cotroller_wrench_zero_service = rospy.ServiceProxy(wrench_zero_service_name, Empty)
+        except rospy.ServiceException as e:
+            rospy.logerr(f"Service call failed: {e}")
+            exit()
+        rospy.loginfo("Zero reset feedback FT sensor offset")
+        self.cotroller_wrench_zero_service.call()
+        rospy.sleep(1)
 
-        # Initialize IK solver
-        try:
-            self.ik_solver = TracIK(
-                base_link_name="base_link",
-                tip_link_name=self.ee_link,
-                urdf_string=None,  # Will use robot_description parameter
-                timeout=0.05,
-                epsilon=1e-5,
-                solver_type="Distance"
-            )
-            self.get_logger().info("TracIK solver initialized successfully")
-        except Exception as e:
-            self.get_logger().error(f"Failed to initialize TracIK solver: {e}")
-            # Continue without IK solver for now
 
-        # Control parameters
+        self.move_group = MoveGroupCommander(
+            rospy.get_param("move_group_name", "manipulator")
+        )
+        self.kinematics = ur_kinematics()
+        self.ee_link = rospy.get_param("~ee_link")
+
         control_freq = 100
         self._min_traj_dur = 5.0 / control_freq
         self._speed_scale = 1
         self._use_gripper = use_gripper
 
-    def _declare_parameters(self):
-        """Declare ROS2 parameters"""
-        self.declare_parameter("joint_names_order", [])
-        self.declare_parameter("joint_max_vel", [])
-        self.declare_parameter("joint_pos_limits_upper", [])
-        self.declare_parameter("joint_pos_limits_lower", [])
-        self.declare_parameter("joint_trajectory_controller_command_topic", "/joint_trajectory_controller/joint_trajectory")
-        self.declare_parameter("cartesian_impedance_controller_command_topic", "/cartesian_impedance_controller/target_frame")
-        self.declare_parameter("joint_states_topic", "/joint_states")
-        self.declare_parameter("feedback_wrench_topic", "/ft_sensor/wrench")
-        self.declare_parameter("feedback_wrench_zero_service", "/ft_sensor/zero")
-        self.declare_parameter("ee_link", "tool0")
-
-    def get_parameters(self):
-        """Get ROS2 parameters"""
-        self.joint_names_order = self.get_parameter("joint_names_order").get_parameter_value().string_array_value
-        self.joint_max_vel = self.get_parameter("joint_max_vel").get_parameter_value().double_array_value
-        self.joint_pos_limits_upper = self.get_parameter("joint_pos_limits_upper").get_parameter_value().double_array_value
-        self.joint_pos_limits_lower = self.get_parameter("joint_pos_limits_lower").get_parameter_value().double_array_value
-        self.joint_trajectory_controller_command_topic = self.get_parameter("joint_trajectory_controller_command_topic").get_parameter_value().string_value
-        self.cartesian_impedance_controller_command_topic = self.get_parameter("cartesian_impedance_controller_command_topic").get_parameter_value().string_value
-        self.joint_states_topic = self.get_parameter("joint_states_topic").get_parameter_value().string_value
-        self.feedback_wrench_topic = self.get_parameter("feedback_wrench_topic").get_parameter_value().string_value
-        self.feedback_wrench_zero_service = self.get_parameter("feedback_wrench_zero_service").get_parameter_value().string_value
-        self.ee_link = self.get_parameter("ee_link").get_parameter_value().string_value
-
     def joint_states_callback(self, msg: JointState):
-        """Joint states callback"""
         self.ros_joint_state = msg
 
     def wrench_callback(self, msg: WrenchStamped):
-        """Wrench feedback callback"""
         self._wrench = msg
 
     def num_dofs(self) -> int:
@@ -183,37 +110,22 @@ class CartesianImpedanceControlRobot(Robot, Node):
             return 7
         return 6
 
-    def get_joint_state(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def get_joint_state(self) -> np.ndarray:
         """Get the current state of the leader robot.
 
         Returns:
-            tuple: (positions, velocities, efforts) of the robot joints.
+            T: The current state of the leader robot.
         """
-        # Create dictionaries for easy lookup
+        # Create a dictionary for easy lookup
         joint_positions_dict = dict(
             zip(self.ros_joint_state.name, self.ros_joint_state.position)
         )
-        joint_velocities_dict = dict(
-            zip(self.ros_joint_state.name, self.ros_joint_state.velocity)
-        )
-        joint_efforts_dict = dict(
-            zip(self.ros_joint_state.name, self.ros_joint_state.effort)
-        )
-        
         # Reorder the joints according to self.joint_names
-        positions = np.array(
+        self.robot_joints = np.array(
             [joint_positions_dict[name] for name in self.joint_names_order]
         )
-        velocities = np.array(
-            [joint_velocities_dict[name] for name in self.joint_names_order]
-        )
-        efforts = np.array(
-            [joint_efforts_dict[name] for name in self.joint_names_order]
-        )
-        
-        self.robot_joints = positions
 
-        return positions, velocities, efforts
+        return self.robot_joints
 
     def command_joint_state(self, joint_state: np.ndarray) -> None:
         """Command the leader robot to a given state.
@@ -221,33 +133,9 @@ class CartesianImpedanceControlRobot(Robot, Node):
         Args:
             joint_state (np.ndarray): The state to command the leader robot to.
         """
-        try:
-            # Use KDL helper for forward kinematics
-            pos, quat = self.kdl_helper.fk(joint_state.tolist())
-            
-            pose_stamped = PoseStamped()
-            pose_stamped.header.stamp = self.get_clock().now().to_msg()
-            pose_stamped.header.frame_id = "base_link"
-            pose_stamped.pose.position.x = pos[0]
-            pose_stamped.pose.position.y = pos[1]
-            pose_stamped.pose.position.z = pos[2]
-            pose_stamped.pose.orientation.x = quat[0]
-            pose_stamped.pose.orientation.y = quat[1]
-            pose_stamped.pose.orientation.z = quat[2]
-            pose_stamped.pose.orientation.w = quat[3]
-
-            self.cartesian_command_publisher.publish(pose_stamped)
-        except Exception as e:
-            self.get_logger().error(f"Failed to command joint state: {e}")
-
-    def command_pose(self, pose: np.ndarray) -> None:
-        """Command the leader robot to a given pose.
-
-        Args:
-            pose (np.ndarray): The pose to command the leader robot to (pos + quat).
-        """
+        pose = self.kinematics.forward(joint_state, tip_link=self.ee_link)
         pose_stamped = PoseStamped()
-        pose_stamped.header.stamp = self.get_clock().now().to_msg()
+        pose_stamped.header.stamp = rospy.Time.now()
         pose_stamped.header.frame_id = "base_link"
         pose_stamped.pose.position.x = pose[0]
         pose_stamped.pose.position.y = pose[1]
@@ -256,14 +144,31 @@ class CartesianImpedanceControlRobot(Robot, Node):
         pose_stamped.pose.orientation.y = pose[4]
         pose_stamped.pose.orientation.z = pose[5]
         pose_stamped.pose.orientation.w = pose[6]
-        
+
+        self.cartesian_command_publisher.publish(pose_stamped)
+
+    def command_pose(self, pose: np.ndarray) -> None:
+        """Command the leader robot to a given pose.
+
+        Args:
+            pose (np.ndarray): The pose to command the leader robot to.
+        """
+        pose_stamped = PoseStamped()
+        pose_stamped.header.stamp = rospy.Time.now()
+        pose_stamped.header.frame_id = "base_link"
+        pose_stamped.pose.position.x = pose[0]
+        pose_stamped.pose.position.y = pose[1]
+        pose_stamped.pose.position.z = pose[2]
+        pose_stamped.pose.orientation.x = pose[3]
+        pose_stamped.pose.orientation.y = pose[4]
+        pose_stamped.pose.orientation.z = pose[5]
+        pose_stamped.pose.orientation.w = pose[6]
         self.cartesian_command_publisher.publish(pose_stamped)
 
     def get_observations(self) -> Dict[str, np.ndarray]:
-        joint_positions, joint_velocities, joint_efforts = self.get_joint_state()
-        pos_quat = self.kinematics.forward(joint_positions, tip_link=self.ee_link)
-        gripper_pos = np.array([joint_positions[-1]])
-        
+        joints = self.get_joint_state()
+        pos_quat = self.kinematics.forward(joints, tip_link=self.ee_link)
+        gripper_pos = np.array([joints[-1]])
         wrench = np.array(
             [
                 self._wrench.wrench.force.x,
@@ -274,31 +179,24 @@ class CartesianImpedanceControlRobot(Robot, Node):
                 self._wrench.wrench.torque.z,
             ]
         )
-        jacobian = self.move_group.get_jacobian_matrix(list(joint_positions))
+        jacobian = self.move_group.get_jacobian_matrix(list(joints))
         return {
-            "joint_positions": joint_positions,
-            "joint_velocities": joint_velocities,
-            "joint_torques": joint_efforts,
+            "joint_positions": joints,
+            "joint_velocities": joints,
+            "joint_torques": joints,
             "gripper_position": gripper_pos,
-            "ee_pos": pos_quat[:3] if len(pos_quat) >= 3 else np.zeros(3),
-            "ee_quat": pos_quat[3:7] if len(pos_quat) >= 7 else np.array([0, 0, 0, 1]),
-            "ee_rot_matrix": rot_matrix,
-            "ee_euler": euler_angles,
+            "ee_pos": pos_quat[:3],
+            "ee_quat": pos_quat[3:],
+            "ee_rot_matrix": tf.transformations.quaternion_matrix(pos_quat[3:])[:3, :3],
+            "ee_euler": tf.transformations.euler_from_quaternion(pos_quat[3:]),
             "ee_wrench": wrench,
             "jacobian": jacobian,
         }
 
 
 def main():
-    rclpy.init()
-    
-    try:
-        ros_robot = CartesianImpedanceControlRobot(use_gripper=False)
-        rclpy.spin(ros_robot)
-    except Exception as e:
-        print(f"Error: {e}")
-    finally:
-        rclpy.shutdown()
+    rospy.init_node("ros_robot")
+    ros_robot = CartesianImpedanceControlRobot(use_gripper=False)
 
 
 if __name__ == "__main__":

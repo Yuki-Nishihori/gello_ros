@@ -1,0 +1,9 @@
+<launch>
+    <arg name="robot_config" default="$(find gello_ros)/config/ur5e.yaml" />
+    <arg name="common_config" default="$(find gello_ros)/config/common.yaml" />
+
+    <node name="gello_publisher" pkg="gello_ros" type="run_gello.py" output="screen">
+        <rosparam command="load" file="$(arg robot_config)" />
+        <rosparam command="load" file="$(arg common_config)" />
+    </node>
+</launch>

@@ -1,0 +1,44 @@
+joint_names_order:
+  - "j1"
+  - "j2"
+  - "j3"
+  - "j4"
+  - "j5"
+  - "j6"
+
+joint_max_vel:
+  - 1  # Joint velocity value for j1
+  - 1  # Joint velocity value for j2
+  - 1  # Joint velocity value for j3
+  - 1  # Joint velocity value for j4
+  - 1  # Joint velocity value for j5
+  - 1  # Joint velocity value for j6
+
+joint_pos_limits_lower:
+  - -3.0543  # Lower limit for j1
+  - -4.6251  # Lower limit for j2
+  - -2.8274  # Lower limit for j3
+  - -4.6251  # Lower limit for j4
+  - -3.0543  # Lower limit for j5
+  - -3.0543  # Lower limit for j6
+
+joint_pos_limits_upper:
+  - 3.0543  # Upper limit for j1
+  - 1.4835  # Upper limit for j2
+  - 2.8274  # Upper limit for j3
+  - 1.4835  # Upper limit for j4
+  - 3.0543  # Upper limit for j5
+  - 3.0543  # Upper limit for j6
+
+joint_trajectory_controller_command_topic: "/frrobot/position_trajectory_controller/command"
+cartesian_compliance_controller_command_topic: "/target_frame"
+cartesian_motion_controller_command_topic: "/target_frame"
+joint_states_topic: "/joint_states"
+
+gello_home_joints:
+  - !degrees -90.0 # j1
+  - !degrees -90.0  # j2
+  - !degrees -90.0  # j3
+  - !degrees -90.0  # j4
+  - !degrees 90.0  # j5
+  - 0.0  # j6

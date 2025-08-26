@@ -2,14 +2,13 @@ from typing import Any, Dict
 import numpy as np
 import os
 import pickle
-import rclpy
-from rclpy.node import Node
+import rospy
 from einops import rearrange
 import torch
 from gello_ros.agents.agent import Agent
-from scipy.spatial.transform import Rotation as R
+import tf.transformations
 
-class ACTAgent(Agent, Node):
+class ACTAgent(Agent):
     def __init__(
         self,
         policy,
@@ -19,8 +18,6 @@ class ACTAgent(Agent, Node):
         task_cfg: dict,
         device: str,
     ):
-        # Initialize ROS2 node
-        Node.__init__(self, 'act_agent')
         """
         Initializes the ACTAgent with policy, camera names, and configurations.
 
@@ -36,15 +33,9 @@ class ACTAgent(Agent, Node):
         self.camera_names = camera_names
         self.device = device
 
-        # Declare and get ROS2 parameters
-        self.declare_parameter("eval_ckpt_dir", "")
-        self.declare_parameter("number_of_steps", 1000)
-        
-        eval_ckpt_dir = self.get_parameter("eval_ckpt_dir").get_parameter_value().string_value
-        
         # Load dataset statistics
         stats_path = os.path.join(
-            eval_ckpt_dir,
+            rospy.get_param("~eval_ckpt_dir"),
             "dataset_stats.pkl",
         )
 
@@ -53,7 +44,6 @@ class ACTAgent(Agent, Node):
             with open(stats_path, "rb") as f:
                 self.stats = pickle.load(f)
         except FileNotFoundError:
-            self.get_logger().error(f"Statistics file not found at: {stats_path}")
             raise ValueError(f"Statistics file not found at: {stats_path}")
 
         # Preprocess and postprocess lambdas
@@ -66,7 +56,7 @@ class ACTAgent(Agent, Node):
 
         # Query frequency configuration
         self.query_frequency = policy_config["num_queries"]
-        num_steps = self.get_parameter("number_of_steps").get_parameter_value().integer_value
+        num_steps=rospy.get_param("~number_of_steps")
         if policy_config["temporal_agg"]:
             self.query_frequency = 1
             self.all_time_actions = torch.zeros(
@@ -170,9 +160,10 @@ class ACTAgent(Agent, Node):
             action = self.post_process(raw_action)
             pos=action[:3]
             rot_matrix=action[3:].reshape((3,3))
-            # Convert rotation matrix to quaternion and euler angles
-            quat = R.from_matrix(rot_matrix).as_quat()  # [x, y, z, w] format
-            euler = R.from_matrix(rot_matrix).as_euler('xyz')
+            rot_hom = np.eye(4)
+            rot_hom[:3, :3] = rot_matrix
+            quat=tf.transformations.quaternion_from_matrix(rot_hom)
+            euler=tf.transformations.euler_from_matrix(rot_hom)
 
             action_dict["joint_positions"]=np.zeros(6)
             action_dict["ee_pos"] = pos

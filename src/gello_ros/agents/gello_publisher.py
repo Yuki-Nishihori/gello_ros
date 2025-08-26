@@ -10,9 +10,9 @@ from gello_ros.agents.agent import Agent
 from gello_ros.robots.dynamixel import DynamixelRobot
 import time
 
-import rclpy
-from rclpy.node import Node
+import rospy
 from sensor_msgs.msg import JointState
+import moveit_commander
 
 
 @dataclass
@@ -104,7 +104,7 @@ PORT_CONFIG_MAP: Dict[str, DynamixelRobotConfig] = {
 }
 
 
-class GelloPublisher(Agent, Node):
+class GelloPublisher(Agent):
     def __init__(
         self,
         port: str,
@@ -112,24 +112,9 @@ class GelloPublisher(Agent, Node):
         start_joints: Optional[np.ndarray] = None,
         mode: Optional[str] = "unilateral_position",
     ):
-        # Initialize ROS2 node
-        Node.__init__(self, 'gello_publisher')
-        # Declare ROS2 parameters
-        self.declare_parameter("dynamixel_baudrate", 2000000)
-        self.declare_parameter("use_gripper", False)
-        self.declare_parameter("stall_torque", 0.52)
-        self.declare_parameter("stall_current", 1.5)
-        self.declare_parameter("torque_rate", [0.005, 0.005, 0.005, 0.005, 0.005, 0.005])
-        self.declare_parameter("current_goal_constant", 0.001)
-        self.declare_parameter("control_hz", 10)
-        self.declare_parameter("gello_port", "")
-        
-        # Get parameters
-        baudrate = self.get_parameter("dynamixel_baudrate").get_parameter_value().integer_value
-        use_gripper = self.get_parameter("use_gripper").get_parameter_value().bool_value
-        
+        baudrate = rospy.get_param("~dynamixel_baudrate", 2000000)
         if dynamixel_config is not None:
-            if not use_gripper:
+            if rospy.get_param("~use_gripper", False) == False:
                 dynamixel_config.gripper_config = None
             self._robot = dynamixel_config.make_robot(
                 port=port, baudrate=baudrate, start_joints=start_joints
@@ -138,7 +123,7 @@ class GelloPublisher(Agent, Node):
             assert os.path.exists(port), port
             assert port in PORT_CONFIG_MAP, f"Port {port} not in config map"
             config = PORT_CONFIG_MAP[port]
-            if not use_gripper:
+            if rospy.get_param("~use_gripper", False) == False:
                 config.gripper_config = None
             self._robot = config.make_robot(
                 port=port, baudrate=baudrate, start_joints=start_joints
@@ -146,11 +131,13 @@ class GelloPublisher(Agent, Node):
         self._mode = mode
 
         # Set constants for torque feedback
-        self.stall_torque = self.get_parameter("stall_torque").get_parameter_value().double_value
-        self.stall_current = self.get_parameter("stall_current").get_parameter_value().double_value
+        self.stall_torque = rospy.get_param("~stall_torque", 0.52)
+        self.stall_current = rospy.get_param("~stall_current", 1.5)
         self.torque_constant = self.stall_torque / self.stall_current
-        self.torque_rate = self.get_parameter("torque_rate").get_parameter_value().double_array_value
-        self.current_goal_constant = self.get_parameter("current_goal_constant").get_parameter_value().double_value
+        self.torque_rate = rospy.get_param(
+            "~torque_rate", [0.005, 0.005, 0.005, 0.005, 0.005, 0.005]
+        )
+        self.current_goal_constant = rospy.get_param("~current_goal_constant", 0.001)
 
         # Set control mode
         self._robot.set_control_mode(
@@ -162,48 +149,28 @@ class GelloPublisher(Agent, Node):
             self._robot.set_read_only(False)
         else:
             self._robot.set_read_only(True)
-        # Create ROS2 publisher and timer
-        self.gello_pub = self.create_publisher(JointState, '/gello_joint_states', 10)
-        self.publish_rate = self.get_parameter("control_hz").get_parameter_value().integer_value
-        
-        # Create timer for publishing joint states
-        timer_period = 1.0 / self.publish_rate  # seconds
-        self.timer = self.create_timer(timer_period, self.publish_joint_states_callback)
+        self.gello_pub = rospy.Publisher('/gello_joint_states', JointState, queue_size=10)
+        self.publish_rate = rospy.get_param("~control_hz", 10)
 
-    def publish_joint_states_callback(self):
-        """Timer callback for publishing joint states"""
-        joint_states = self._robot.get_joint_state()
-        if joint_states is not None:
-            msg = JointState()
-            msg.header.stamp = self.get_clock().now().to_msg()
-            msg.name = [f'joint_{i+1}' for i in range(len(joint_states))]  # Optional: customize joint names
-            msg.position = joint_states  # Assuming joint_states contains joint positions
-            # If you have velocity and effort data:
-            # msg.velocity = [0.0] * len(joint_states)
-            # msg.effort = [0.0] * len(joint_states)
-            self.gello_pub.publish(msg)
-            
-    def start_publishing(self):
-        """Start the ROS2 node spinning"""
-        rclpy.spin(self)
+    def publish_joint_states(self):
+        rate = rospy.Rate(self.publish_rate)
+        while not rospy.is_shutdown():
+            joint_states = self._robot.get_joint_state()
+            if joint_states is not None:
+                msg = JointState()
+                msg.header.stamp = rospy.Time.now()
+                msg.name = [f'joint_{i+1}' for i in range(len(joint_states))]  # Optional: customize joint names
+                msg.position = joint_states  # Assuming joint_states contains joint positions
+                # If you have velocity and effort data:
+                # msg.velocity = [0.0] * len(joint_states)
+                # msg.effort = [0.0] * len(joint_states)
+                self.gello_pub.publish(msg)
+            rate.sleep()
         
-def main():
-    rclpy.init()
-    
-    try:
-        # Get gello_port parameter from command line or default
-        import sys
-        port = None
-        if len(sys.argv) > 1:
-            port = sys.argv[1]
-        
-        agent = GelloPublisher(port=port)
-        agent.start_publishing()
-    except Exception as e:
-        print(f"Error: {e}")
-    finally:
-        rclpy.shutdown()
-
-
 if __name__ == '__main__':
-    main()
+    rospy.init_node('gello_pub_agent')
+    agent = GelloPublisher(port=rospy.get_param("~gello_port", None))
+    try:
+        agent.publish_joint_states()
+    except rospy.ROSInterruptException:
+        pass

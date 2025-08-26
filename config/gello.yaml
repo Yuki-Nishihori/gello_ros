@@ -1,19 +1,16 @@
-/**:
-  ros__parameters:
-
-    use_gripper: False
-    gello_port: "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FT8ISUQE-if00-port0"
-    dynamixel_baudrate: 2000000
-    control_hz: 500
+use_gripper: False
+gello_port: "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FT8ISUQE-if00-port0"
+dynamixel_baudrate: 2000000
+control_hz: 500
 
 
-    stall_torque: 0.52
-    stall_current: 1.5
-    torque_rate:
-      - 0.003
-      - 0.003
-      - 0.003
-      - 0.003
-      - 0.003
-      - 0.003
-    current_goal_constant: 0.001
+stall_torque: 0.52
+stall_current: 1.5
+torque_rate:
+  - 0.003
+  - 0.003
+  - 0.003
+  - 0.003
+  - 0.003
+  - 0.003
+current_goal_constant: 0.001
