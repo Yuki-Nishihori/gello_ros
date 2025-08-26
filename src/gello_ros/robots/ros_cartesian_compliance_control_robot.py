@@ -126,13 +126,56 @@ class CartesianComplianceControlRobot(Robot, Node):
             # Get URDF from robot_description parameter
             urdf_string = None
             try:
-                # Remove leading slash from parameter name
-                param_name = self.robot_description_name.lstrip('/')
-                self.get_logger().info(f"Attempting to get URDF from parameter: {param_name}")
-                urdf_string = self.get_parameter(param_name).get_parameter_value().string_value
-                self.get_logger().info(f"Retrieved URDF from parameter: {param_name}, length: {len(urdf_string)} chars")
+                self.get_logger().info(f"Attempting to get URDF from parameter: robot_description")
+                urdf_string = self.get_parameter("robot_description").get_parameter_value().string_value
+                self.get_logger().info(f"Retrieved URDF from parameter: robot_description, length: {len(urdf_string)} chars")
+                
+                # URDFが空の場合、外部パラメータサーバーから取得を試行
+                if not urdf_string or len(urdf_string) == 0:
+                    self.get_logger().warn("robot_description parameter is empty, trying to get from external parameter server")
+                    # 外部のrobot_state_publisherなどから取得を試行
+                    try:
+                        import subprocess
+                        result = subprocess.run(
+                            ['ros2', 'param', 'get', '/robot_state_publisher', 'robot_description'],
+                            capture_output=True, text=True, timeout=2.0
+                        )
+                        if result.returncode == 0:
+                            raw_output = result.stdout.strip()
+                            self.get_logger().debug(f"Raw ros2 param output: {raw_output[:100]}...")
+                            
+                            # XMLの開始を探す (<?xml または <robot で始まる)
+                            xml_start = -1
+                            for tag in ['<?xml', '<robot']:
+                                idx = raw_output.find(tag)
+                                if idx != -1:
+                                    xml_start = idx
+                                    break
+                            
+                            if xml_start != -1:
+                                urdf_string = raw_output[xml_start:]
+                                self.get_logger().info(f"Retrieved URDF from external source, length: {len(urdf_string)} chars")
+                                self.get_logger().debug(f"URDF starts with: {urdf_string[:50]}...")
+                            else:
+                                self.get_logger().error("Failed to find XML start tag in external URDF data")
+                    except Exception as ext_e:
+                        self.get_logger().debug(f"Failed to get URDF from external source: {ext_e}")
+                        
+                    # それでも失敗した場合、rclpy経由でパラメータ取得を試行
+                    if not urdf_string or len(urdf_string) == 0:
+                        try:
+                            from rclpy.parameter_client import SyncParameterClient
+                            param_client = SyncParameterClient(self, '/robot_state_publisher')
+                            if param_client.wait_for_server(timeout_sec=1.0):
+                                params = param_client.get_parameters(['robot_description'])
+                                if params and len(params) > 0:
+                                    urdf_string = params[0].value
+                                    self.get_logger().info(f"Retrieved URDF via rclpy client, length: {len(urdf_string)} chars")
+                        except Exception as rclpy_e:
+                            self.get_logger().debug(f"Failed to get URDF via rclpy client: {rclpy_e}")
+                        
             except Exception as e:
-                self.get_logger().error(f"Failed to get {param_name} parameter: {e}")
+                self.get_logger().error(f"Failed to get robot_description parameter: {e}")
                 self.get_logger().info("Proceeding without KDL kinematics initialization")
                 
             if urdf_string and len(urdf_string) > 0:
@@ -193,6 +236,8 @@ class CartesianComplianceControlRobot(Robot, Node):
         self.declare_parameter("feedback_wrench_zero_service", "/ft_sensor/zero")
         self.declare_parameter("ee_link", "tool0")
         self.declare_parameter("robot_description_name", "/robot_description")
+        # robot_descriptionパラメータを宣言（空文字列をデフォルトとする）
+        self.declare_parameter("robot_description", "")
 
     def get_parameters(self):
         """Get ROS2 parameters"""
