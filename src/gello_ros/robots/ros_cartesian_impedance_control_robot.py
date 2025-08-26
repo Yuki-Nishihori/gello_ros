@@ -189,9 +189,6 @@ class CartesianImpedanceControlRobot(Robot, Node):
         Returns:
             tuple: (positions, velocities, efforts) of the robot joints.
         """
-        if self.ros_joint_state is None:
-            return np.zeros(6), np.zeros(6), np.zeros(6)
-            
         # Create dictionaries for easy lookup
         joint_positions_dict = dict(
             zip(self.ros_joint_state.name, self.ros_joint_state.position)
@@ -202,18 +199,18 @@ class CartesianImpedanceControlRobot(Robot, Node):
         joint_efforts_dict = dict(
             zip(self.ros_joint_state.name, self.ros_joint_state.effort)
         )
-
-        # Reorder the joints according to self.joint_names_order
+        
+        # Reorder the joints according to self.joint_names
         positions = np.array(
-            [joint_positions_dict.get(name, 0.0) for name in self.joint_names_order]
+            [joint_positions_dict[name] for name in self.joint_names_order]
         )
         velocities = np.array(
-            [joint_velocities_dict.get(name, 0.0) for name in self.joint_names_order]
+            [joint_velocities_dict[name] for name in self.joint_names_order]
         )
         efforts = np.array(
-            [joint_efforts_dict.get(name, 0.0) for name in self.joint_names_order]
+            [joint_efforts_dict[name] for name in self.joint_names_order]
         )
-
+        
         self.robot_joints = positions
 
         return positions, velocities, efforts
@@ -263,53 +260,21 @@ class CartesianImpedanceControlRobot(Robot, Node):
         self.cartesian_command_publisher.publish(pose_stamped)
 
     def get_observations(self) -> Dict[str, np.ndarray]:
-        """Get robot observations including kinematics and sensor data"""
         joint_positions, joint_velocities, joint_efforts = self.get_joint_state()
+        pos_quat = self.kinematics.forward(joint_positions, tip_link=self.ee_link)
+        gripper_pos = np.array([joint_positions[-1]])
         
-        try:
-            # Use KDL helper for forward kinematics
-            pos, quat = self.kdl_helper.fk(joint_positions.tolist())
-            pos_quat = np.concatenate([pos, quat])
-        except Exception as e:
-            self.get_logger().error(f"Failed to compute FK: {e}")
-            pos_quat = np.zeros(7)
-            
-        gripper_pos = np.array([joint_positions[-1]]) if len(joint_positions) > 0 else np.array([0.0])
-
-        # Get wrench data
-        if self._wrench is not None:
-            wrench = np.array([
+        wrench = np.array(
+            [
                 self._wrench.wrench.force.x,
                 self._wrench.wrench.force.y,
                 self._wrench.wrench.force.z,
                 self._wrench.wrench.torque.x,
                 self._wrench.wrench.torque.y,
                 self._wrench.wrench.torque.z,
-            ])
-        else:
-            wrench = np.zeros(6)
-
-        # Get Jacobian using KDL helper
-        try:
-            jacobian = self.kdl_helper.jacobian(joint_positions.tolist())
-        except Exception as e:
-            self.get_logger().error(f"Failed to compute Jacobian: {e}")
-            jacobian = np.zeros((6, 6))
-
-        # Convert quaternion to rotation matrix and euler angles
-        if len(pos_quat) >= 7:
-            try:
-                rotation = R.from_quat(pos_quat[3:7])  # x,y,z,w format
-                rot_matrix = rotation.as_matrix()
-                euler_angles = rotation.as_euler('xyz')
-            except Exception as e:
-                self.get_logger().error(f"Failed to convert quaternion: {e}")
-                rot_matrix = np.eye(3)
-                euler_angles = np.zeros(3)
-        else:
-            rot_matrix = np.eye(3)
-            euler_angles = np.zeros(3)
-
+            ]
+        )
+        jacobian = self.move_group.get_jacobian_matrix(list(joint_positions))
         return {
             "joint_positions": joint_positions,
             "joint_velocities": joint_velocities,
