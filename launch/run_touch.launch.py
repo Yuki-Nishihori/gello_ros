@@ -71,8 +71,8 @@ def generate_launch_description():
     return LaunchDescription([
         touch_config_arg,
         GroupAction([
-            touch_state_node,
+            touch_base_tf_publisher_node,
             robot_state_publisher_node,
-            touch_base_tf_publisher_node
+            touch_state_node,
         ])
     ])
