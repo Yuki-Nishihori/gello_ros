@@ -39,7 +39,7 @@
     cartesian_motion_controller_command_topic: "/cartesian_motion_controller/target_frame"
     cartesian_compliance_controller_command_topic: "/cartesian_compliance_controller/target_frame"
     cartesian_impedance_controller_command_topic: "/cartesian_impedance_controller/target_frame"
-    ee_link: "pestle_tip"
+    ee_link: "tool0"
     joint_states_topic: "/joint_states"
     robot_description_name: "/robot_description"
 
