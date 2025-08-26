@@ -57,7 +57,10 @@ def generate_launch_description():
         namespace='touch', 
         output='screen',
         # Use the newly defined parameter for robot_description
-        parameters=[{'robot_description': robot_description_param, 'publish_frequency': 30.0}],
+        parameters=[{
+            'robot_description': robot_description_param, 
+            'publish_frequency': 30.0
+        }],
     )
 
     touch_base_tf_publisher_node = Node(
