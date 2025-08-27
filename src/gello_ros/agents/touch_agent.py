@@ -60,7 +60,7 @@ class TouchAgent(Agent, Node):
 
     def _setup_parameters(self) -> None:
         """ROSパラメータを宣言し、読み込みます。"""
-        self.declare_parameter("touch_ee_pose_topic", "/touch/ee_pose")
+        self.declare_parameter("touch_ee_pose_topic", "/touch/tip_pose")
         self.declare_parameter("touch_button_topic", "/touch/button_event")
         self.declare_parameter("touch_force_feedback_topic", "/touch/force_feedback")
         self.declare_parameter("touch_max_force", 1.5)
