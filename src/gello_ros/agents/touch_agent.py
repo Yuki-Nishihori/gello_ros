@@ -102,18 +102,43 @@ class TouchAgent(Agent, Node):
         )
 
     def _setup_tf(self) -> None:
-        """TF2のBufferとListenerを初期化します。"""
+        """TF2のBufferとListenerを初期化し、事前にTF変換可能性を確認します。"""
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
+        
+        # 初期化時にTF変換可能性を確認（bilateral modeの場合のみ）
+        if self.teleop_mode == "bilateral":
+            self._wait_for_tf_transform()
 
     def _log_topic_info(self) -> None:
         """Publisherとsubscriberのtopic一覧をログ出力します。"""
         self.get_logger().info("=== TouchAgent Topic Configuration ===")
         self.get_logger().info(f"  - teleoperation_mode: {self.teleop_mode}")
-        self.get_logger().info(f"  - robot_base_frame: {self.robot_base_frame}")
+        self.get_logger().info(f"  - robot_base_frame: {self.touch_base_frame}")
         self.get_logger().info(f"  - feedback_wrench_sensor_frame: {self.feedback_wrench_sensor_frame}")
         self.get_logger().info("=======================================")
 
+    def _wait_for_tf_transform(self) -> None:
+        """TF変換可能性を事前確認します（bilateral modeの初期化時）。"""
+        self.get_logger().info(f"TF変換可能性を確認中: '{self.touch_base_frame}' -> '{self.feedback_wrench_sensor_frame}'")
+        start_time = time.time()
+        while rclpy.ok():
+            if time.time() - start_time > 5.0:
+                self.get_logger().error(f"TF変換準備が未完了。フレーム '{self.touch_base_frame}' -> '{self.feedback_wrench_sensor_frame}' の変換が利用できません。システムを終了します。")
+                exit()
+            try:
+                self.tf_buffer.lookup_transform(
+                    self.touch_base_frame, 
+                    self.feedback_wrench_sensor_frame, 
+                    tf2_ros.Time(), 
+                    timeout=Duration(seconds=0.1)
+                )
+                self.get_logger().info("TF変換が正常に準備されました。")
+                time.sleep(1)
+                break
+            except tf2_ros.TransformException:
+                rclpy.spin_once(self, timeout_sec=0.05)
+                
     def _wait_for_first_pose(self) -> None:
         """指定したトピックから最初のPoseメッセージが届くまで待機します。"""
         self.get_logger().info(f"トピック '{self.ee_pose_topic}' からのメッセージを待機中...")
@@ -215,7 +240,7 @@ class TouchAgent(Agent, Node):
                     self.robot_base_frame, 
                     self.feedback_wrench_sensor_frame, 
                     tf2_ros.Time(), 
-                    timeout=Duration(seconds=1.0)
+                    timeout=Duration(seconds=0.002)  # 2msに変更
                 )
                 wrench_vis, wrench_feedback = self.transform_wrench(obs["ee_wrench"], transform)
                 
