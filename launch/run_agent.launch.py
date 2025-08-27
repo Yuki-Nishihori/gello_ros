@@ -3,8 +3,10 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, Command, PathJoinSubstitution, FindExecutable
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
+from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
     robot_config = LaunchConfiguration('robot_config')
@@ -17,6 +19,48 @@ def generate_launch_description():
     controller_type = LaunchConfiguration('controller_type')
 
     gello_ros_share_dir = get_package_share_directory('gello_ros')
+
+    # Robot description generation
+    robot_description_content = Command(
+        [
+            PathJoinSubstitution([FindExecutable(name="xacro")]),
+            " ",
+            PathJoinSubstitution([FindPackageShare("grinding_robot_description"), "urdf", "ur", "ur5e_with_pestle.urdf.xacro"]),
+            " ",
+            "robot_ip:=192.168.58.42",
+            " ",
+            "joint_limit_params:=",
+            PathJoinSubstitution([FindPackageShare("grinding_robot_description"), "config", "ur5e", "joint_limits.yaml"]),
+            " ",
+            "kinematics_params:=",
+            PathJoinSubstitution([FindPackageShare("grinding_robot_description"), "config", "ur5e", "default_kinematics.yaml"]),
+            " ",
+            "physical_params:=",
+            PathJoinSubstitution([FindPackageShare("grinding_robot_description"), "config", "ur5e", "physical_parameters.yaml"]),
+            " ",
+            "visual_params:=",
+            PathJoinSubstitution([FindPackageShare("grinding_robot_description"), "config", "ur5e", "visual_parameters.yaml"]),
+            " ",
+            "safety_limits:=true",
+            " ",
+            "safety_pos_margin:=0.15",
+            " ",
+            "safety_k_position:=20",
+            " ",
+            "name:=ur5e",
+            " ",
+            "tf_prefix:=",
+            " ",
+            "use_fake_hardware:=false",
+            " ",
+            "fake_sensor_commands:=false",
+            " ",
+            "headless_mode:=false",
+        ]
+    )
+    robot_description = {
+        "robot_description": ParameterValue(value=robot_description_content, value_type=str)
+    }
 
     return LaunchDescription([
         DeclareLaunchArgument(
@@ -60,6 +104,7 @@ def generate_launch_description():
             parameters=[
                 robot_config,
                 common_config,
+                robot_description,
                 {
                     'save_episode': save_episode,
                     'agent_type': agent_type,

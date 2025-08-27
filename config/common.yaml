@@ -10,7 +10,7 @@
     feedback_wrench_sensor_frame: "tool0"
     feedback_wrench_topic: "/ft_sensor_wrench"
     feedback_wrench_zero_service: "/ft_sensor_wrench_filtered/zero_ftsensor"
-    teleoperation_mode: "bilateral" # "unilateral" or "bilateral"
+    teleoperation_mode: "unilateral" # "unilateral" or "bilateral"
     use_gripper: False
     use_FT_sensor: True
     touch_max_force: 3.3

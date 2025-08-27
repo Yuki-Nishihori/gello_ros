@@ -113,9 +113,12 @@ class TouchAgent(Agent, Node):
 
     def _setup_kdl(self) -> None:
         """KDLとstatic TF変換を初期化します。"""
+        self.get_logger().info("KDL初期化を開始...")
+        
         # KDLヘルパーの初期化
         try:
             # URDFの取得
+            self.get_logger().info("URDFを取得中...")
             urdf_string = self._get_robot_urdf()
             if not urdf_string:
                 self.get_logger().error("URDFの取得に失敗しました。KDLを無効化します。")
@@ -124,6 +127,7 @@ class TouchAgent(Agent, Node):
                 return
             
             # KDLヘルパーの初期化
+            self.get_logger().info(f"KDLヘルパーを初期化中... base_link='base_link', ee_link='{self.feedback_wrench_sensor_frame}'")
             self.kdl_helper = KDLHelper(
                 self.get_logger(),
                 urdf_path=None,
@@ -131,14 +135,24 @@ class TouchAgent(Agent, Node):
                 base_link="base_link",
                 ee_link=self.feedback_wrench_sensor_frame  # tool0
             )
-            self.get_logger().info("KDL初期化が完了しました")
+            self.get_logger().info(f"KDL初期化が完了しました: {self.kdl_helper._num_jnts} joints")
             
             # 静的TF変換の取得（robot_base_frame <-> touch_base_frame）
             if self.teleop_mode == "bilateral":
+                self.get_logger().info("静的TF変換を取得中...")
                 self._get_static_transform()
+                if self.static_transform is not None:
+                    self.get_logger().info("静的TF変換の取得が完了しました")
+                else:
+                    self.get_logger().warn("静的TF変換の取得に失敗しました")
+            else:
+                self.get_logger().info("unilateralモードのため、静的TF変換をスキップしました")
+                self.static_transform = None
                 
         except Exception as e:
             self.get_logger().error(f"KDL初期化に失敗: {e}")
+            import traceback
+            self.get_logger().error(f"詳細: {traceback.format_exc()}")
             self.kdl_helper = None
             self.static_transform = None
 
@@ -155,12 +169,16 @@ class TouchAgent(Agent, Node):
         """ロボットのURDFを取得します。"""
         try:
             # robot_descriptionパラメータから直接取得を試行
+            self.get_logger().info("robot_descriptionパラメータから取得を試行...")
             urdf_string = self.get_parameter("robot_description").get_parameter_value().string_value
             if urdf_string and len(urdf_string) > 0:
                 self.get_logger().info(f"URDFを取得しました（長さ: {len(urdf_string)} chars）")
                 return urdf_string
+            else:
+                self.get_logger().warn("robot_descriptionパラメータが空です")
             
             # 外部パラメータから取得を試行
+            self.get_logger().info("外部パラメータサーバーから取得を試行...")
             import subprocess
             result = subprocess.run(
                 ['ros2', 'param', 'get', '/robot_state_publisher', 'robot_description'],
@@ -173,9 +191,14 @@ class TouchAgent(Agent, Node):
                     urdf_string = raw_output[xml_start:]
                     self.get_logger().info(f"外部URDFを取得しました（長さ: {len(urdf_string)} chars）")
                     return urdf_string
+                else:
+                    self.get_logger().warn("外部パラメータにXMLが見つかりませんでした")
+            else:
+                self.get_logger().warn(f"外部パラメータの取得に失敗: return code {result.returncode}")
         except Exception as e:
             self.get_logger().warn(f"URDF取得エラー: {e}")
         
+        self.get_logger().error("すべてのURDF取得方法が失敗しました")
         return ""
 
     def _get_static_transform(self) -> None:
@@ -260,7 +283,9 @@ class TouchAgent(Agent, Node):
         """
         # KDLまたは静的変換が利用できない場合はフォールバック
         if self.kdl_helper is None or self.static_transform is None:
-            self.get_logger().debug("KDL変換が利用できません。ゼロレンチを返します。")
+            self.get_logger().warn("KDL変換が利用できません。ゼロレンチを返します。")
+            self.get_logger().debug(f"  - kdl_helper: {self.kdl_helper is not None}")
+            self.get_logger().debug(f"  - static_transform: {self.static_transform is not None}")
             return self._create_zero_wrench_messages()
         
         try:
@@ -269,17 +294,22 @@ class TouchAgent(Agent, Node):
             force_in_tool = np.clip(scaled_wrench[:3], -self.touch_max_force, self.touch_max_force)
             torque_in_tool = np.clip(scaled_wrench[3:], -self.touch_max_force, self.touch_max_force)
 
-            # 2. KDLでtool0からbase_linkへの変換行列を取得
-            tool_transform = self.kdl_helper.forward_kinematics(joint_positions.tolist(), get_transform=True)
+            # 2. KDLでtool0姿勢を取得（base_link基準）
+            tool_pose = self.kdl_helper.forward_kinematics(joint_positions.tolist())  # [x,y,z,qx,qy,qz,qw]
             
-            # 3. tool0座標系からbase_link座標系への力覚変換
-            # 回転行列と並進ベクトルを取得
-            R_tool_to_base = tool_transform[:3, :3]
-            t_tool_to_base = tool_transform[:3, 3]
+            # 3. tool0からbase_linkへの回転行列を取得
+            tool_quat = tool_pose[3:]  # [qx, qy, qz, qw]
+            tool_pos = tool_pose[:3]
             
-            # レンチ変換: [R 0; [t]×R R] * [force; torque]
-            force_in_base = R_tool_to_base @ force_in_tool
-            torque_in_base = R_tool_to_base @ torque_in_tool + np.cross(t_tool_to_base, force_in_base)
+            # base_linkからtool0への回転行列（forward）
+            R_base_to_tool = R.from_quat(tool_quat).as_matrix()
+            
+            # tool0からbase_linkへの回転行列（inverse）
+            R_tool_to_base = R_base_to_tool.T
+            
+            # 力覚の座標変換（回転のみ、位置による影響は無視）
+            force_in_base = R_tool_to_base @ force_in_tool  
+            torque_in_base = R_tool_to_base @ torque_in_tool
             
             # 4. base_linkからtouch_baseへの静的変換を適用
             R_base_to_touch = self.static_transform[:3, :3]
@@ -342,8 +372,16 @@ class TouchAgent(Agent, Node):
         """
         current_ee_pose = np.concatenate((obs["ee_pos"], obs["ee_quat"]))
         
+        # デバッグ: 入力観測の確認
+        self.get_logger().debug(f"TouchAgent act() called:")
+        self.get_logger().debug(f"  - current_ee_pose: {np.round(current_ee_pose, 3)}")
+        self.get_logger().debug(f"  - joint_positions: {np.round(obs['joint_positions'], 3)}")
+        self.get_logger().debug(f"  - teleop_active: {self._is_teleop_active}")
+        self.get_logger().debug(f"  - touch_current_pose: {np.round(self._touch_current_pose, 3) if self._touch_current_pose is not None else None}")
+        
         if self.teleop_mode == "bilateral":
             # KDLベースのリアルタイム力覚変換を使用
+            self.get_logger().debug(f"  - ee_wrench: {np.round(obs['ee_wrench'], 3)}")
             wrench_vis, wrench_feedback = self.transform_wrench_kdl(
                 obs["ee_wrench"], 
                 obs["joint_positions"]
@@ -351,6 +389,7 @@ class TouchAgent(Agent, Node):
             
             self.force_feedback_vis_pub.publish(wrench_vis)
             self.force_feedback_pub.publish(wrench_feedback)
+            self.get_logger().debug(f"  - published force feedback: [{wrench_feedback.force.x:.3f}, {wrench_feedback.force.y:.3f}, {wrench_feedback.force.z:.3f}]")
 
         if self._is_teleop_active and not self._was_teleop_active:
             # ボタンを押した時の開始姿勢は、保持されている目標姿勢（なければ現在の実際の姿勢）
@@ -373,27 +412,34 @@ class TouchAgent(Agent, Node):
 
         target_pose = np.zeros(7)
         if self._is_teleop_active:
+            self.get_logger().debug("  - Teleoperation ACTIVE")
             if self._touch_start_pose is not None and self._robot_start_pose is not None:
                 if self._is_z_lock_active:
+                    self.get_logger().debug("  - Z-lock mode")
                     target_pose = self.calculate_pose_difference(
                         self._touch_start_pose, self._touch_current_pose, self._robot_start_pose
                     )
                     target_pose[3:] = self.z_down_quat
                     self._last_target_pose = target_pose.copy()  # 計算した目標姿勢を保存
                 else:
+                    self.get_logger().debug("  - Free mode")
                     target_pose = self.calculate_pose_difference(
                         self._touch_start_pose, self._touch_current_pose, self._robot_start_pose
                     )
                     self._last_target_pose = target_pose.copy()  # 計算した目標姿勢を保存
             else:
+                self.get_logger().debug("  - Missing poses, using current/stored pose")
                 target_pose = self._robot_current_pose if self._robot_current_pose is not None else current_ee_pose
         else:
+            self.get_logger().debug("  - Teleoperation INACTIVE")
             # テレオペ非アクティブ時の姿勢維持ロジック
             if self._robot_current_pose is None or not self._pose_initialized:
                 self._robot_current_pose = current_ee_pose
                 self._pose_initialized = True
+                self.get_logger().debug("  - Initialized robot_current_pose")
             elif force_pose_update:
                 self._robot_current_pose = current_ee_pose
+                self.get_logger().debug("  - Force updated robot_current_pose")
             
             target_pose = self._robot_current_pose
 
@@ -405,6 +451,11 @@ class TouchAgent(Agent, Node):
             "ee_rot_matrix": R.from_quat(target_quat).as_matrix(),
             "ee_euler": R.from_quat(target_quat).as_euler('xyz')
         }
+        
+        # デバッグ: 最終アクション結果を表示
+        self.get_logger().debug(f"  - target_pose: pos={np.round(target_pose[:3], 3)}, quat={np.round(target_quat, 3)}")
+        self.get_logger().debug(f"  - action_dict ee_pos: {np.round(action_dict['ee_pos'], 3)}")
+        self.get_logger().debug(f"  - action_dict ee_quat: {np.round(action_dict['ee_quat'], 3)}")
         
         debug_pose_msg = PoseStamped()
         debug_pose_msg.header.stamp = self.get_clock().now().to_msg()
