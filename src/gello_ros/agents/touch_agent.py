@@ -65,8 +65,9 @@ class TouchAgent(Agent, Node):
         self.declare_parameter("touch_force_feedback_topic", "/touch/force_feedback")
         self.declare_parameter("touch_max_force", 1.5)
         self.declare_parameter("force_scale_to_touch", 1.0)
-        self.declare_parameter("teleoperation_mode", "unilateral")
-        self.declare_parameter("robot_base_frame", "base_link") # ROS1の実装に合わせてフレーム名を修正・統一
+        self.declare_parameter("teleoperation_mode", "bilateral")
+        self.declare_parameter("robot_base_frame", "base_link")
+        self.declare_parameter("touch_base_frame", "touch_base")
         self.declare_parameter("feedback_wrench_sensor_frame", "tool0")
 
         self.ee_pose_topic = self.get_parameter("touch_ee_pose_topic").get_parameter_value().string_value
@@ -76,6 +77,7 @@ class TouchAgent(Agent, Node):
         self.force_scale_to_touch = self.get_parameter("force_scale_to_touch").get_parameter_value().double_value
         self.teleop_mode = self.get_parameter("teleoperation_mode").get_parameter_value().string_value
         self.robot_base_frame = self.get_parameter("robot_base_frame").get_parameter_value().string_value
+        self.touch_base_frame = self.get_parameter("touch_base_frame").get_parameter_value().string_value
         self.feedback_wrench_sensor_frame = self.get_parameter("feedback_wrench_sensor_frame").get_parameter_value().string_value
 
         if self.teleop_mode not in ["unilateral", "bilateral"]:
@@ -114,7 +116,8 @@ class TouchAgent(Agent, Node):
         """Publisherとsubscriberのtopic一覧をログ出力します。"""
         self.get_logger().info("=== TouchAgent Topic Configuration ===")
         self.get_logger().info(f"  - teleoperation_mode: {self.teleop_mode}")
-        self.get_logger().info(f"  - robot_base_frame: {self.touch_base_frame}")
+        self.get_logger().info(f"  - robot_base_frame: {self.robot_base_frame}")
+        self.get_logger().info(f"  - touch_base_frame: {self.touch_base_frame}")
         self.get_logger().info(f"  - feedback_wrench_sensor_frame: {self.feedback_wrench_sensor_frame}")
         self.get_logger().info("=======================================")
 
@@ -179,7 +182,7 @@ class TouchAgent(Agent, Node):
         force_in_tool = np.clip(scaled_wrench[:3], -self.touch_max_force, self.touch_max_force)
         torque_in_tool = np.clip(scaled_wrench[3:], -self.touch_max_force, self.touch_max_force)
 
-        # 2. base_link 座標系への変換に必要な回転と並進を取得
+        # 2. touch_base_frame座標系への変換に必要な回転と並進を取得
         rotation = R.from_quat([
             transform.transform.rotation.x, transform.transform.rotation.y,
             transform.transform.rotation.z, transform.transform.rotation.w
@@ -191,25 +194,20 @@ class TouchAgent(Agent, Node):
             transform.transform.translation.z
         ])
 
-        # 3. レンチを base_link 座標系に変換
-        force_in_base = rotation @ force_in_tool
-        torque_in_base = rotation @ torque_in_tool + np.cross(translation_vector, force_in_base)
+        # 3. レンチをtouch_base_frame座標系に変換
+        force_in_touch_base = rotation @ force_in_tool
+        torque_in_touch_base = rotation @ torque_in_tool + np.cross(translation_vector, force_in_touch_base)
 
-        # 4. RViz可視化用メッセージ (base_link 座標系) を作成
+        # 4. RViz可視化用メッセージ (robot_base_frame座標系) を作成
         wrench_vis_msg = WrenchStamped()
         wrench_vis_msg.header.stamp = self.get_clock().now().to_msg()
         wrench_vis_msg.header.frame_id = self.robot_base_frame
-        wrench_vis_msg.wrench.force.x, wrench_vis_msg.wrench.force.y, wrench_vis_msg.wrench.force.z = force_in_base
-        wrench_vis_msg.wrench.torque.x, wrench_vis_msg.wrench.torque.y, wrench_vis_msg.wrench.torque.z = torque_in_base
+        wrench_vis_msg.wrench.force.x, wrench_vis_msg.wrench.force.y, wrench_vis_msg.wrench.force.z = force_in_touch_base
+        wrench_vis_msg.wrench.torque.x, wrench_vis_msg.wrench.torque.y, wrench_vis_msg.wrench.torque.z = torque_in_touch_base
 
-        # 5. Touchデバイスへのフィードバック用メッセージを作成
+        # 5. Touchデバイスへのフィードバック用メッセージを作成 (touch_base_frame座標系)
         feedback_msg = TouchFeedback()
-        
-        # ======================= ここを修正 =======================
-        # ROS1の正しい実装に基づき、フィードバックする力を tool 座標系から base 座標系に変更します。
-        # これにより、RVizでの可視化とHapticsデバイスへのフィードバックが同じ座標系の力になります。
-        feedback_msg.force.x, feedback_msg.force.y, feedback_msg.force.z = force_in_base
-        # ==========================================================
+        feedback_msg.force.x, feedback_msg.force.y, feedback_msg.force.z = force_in_touch_base
 
         return wrench_vis_msg, feedback_msg
     
@@ -237,7 +235,7 @@ class TouchAgent(Agent, Node):
         if self.teleop_mode == "bilateral":
             try:
                 transform = self.tf_buffer.lookup_transform(
-                    self.robot_base_frame, 
+                    self.touch_base_frame, 
                     self.feedback_wrench_sensor_frame, 
                     tf2_ros.Time(), 
                     timeout=Duration(seconds=0.002)  # 2msに変更
