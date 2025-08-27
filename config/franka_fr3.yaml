@@ -51,7 +51,7 @@
     joint_trajectory_controller_command_topic: "/fr3_arm_controller/joint_trajectory"
     cartesian_motion_controller_command_topic: "/cartesian_motion_controller/target_frame"
     cartesian_compliance_controller_command_topic: "/cartesian_compliance_controller/target_frame"
-    cartesian_impedance_controller_command_topic: "/cartesian_impedance_controller/target_frame"
+    cartesian_impedance_controller_command_topic: "/reference_pose"
     joint_states_topic: "/joint_states"
     robot_description_name: "/robot_description"
 

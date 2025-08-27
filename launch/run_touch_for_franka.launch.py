@@ -68,7 +68,7 @@ def generate_launch_description():
         executable='static_transform_publisher',
         name='static_transform_publisher',
         namespace='touch', 
-        arguments=['1', '0.5', '0', '0', '0', '0', 'base', 'touch_base']
+        arguments=['1', '0.5', '0', '-1.5708', '0', '0', 'base', 'touch_base']
     )
 
     # Create a TimerAction to delay the start of other nodes
