@@ -127,12 +127,12 @@ class TouchAgent(Agent, Node):
                 return
             
             # KDLヘルパーの初期化
-            self.get_logger().info(f"KDLヘルパーを初期化中... base_link='base_link', ee_link='{self.feedback_wrench_sensor_frame}'")
+            self.get_logger().info(f"KDLヘルパーを初期化中... base_link='{self.robot_base_frame}', ee_link='{self.feedback_wrench_sensor_frame}'")
             self.kdl_helper = KDLHelper(
                 self.get_logger(),
                 urdf_path=None,
                 urdf_string=urdf_string,
-                base_link="base_link",
+                base_link=self.robot_base_frame,
                 ee_link=self.feedback_wrench_sensor_frame  # tool0
             )
             self.get_logger().info(f"KDL初期化が完了しました: {self.kdl_helper._num_jnts} joints")

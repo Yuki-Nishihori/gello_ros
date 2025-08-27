@@ -46,7 +46,7 @@
     move_group_name: "fr3_manipulator" # MoveItのプランニンググループ名 (例: panda_manipulator)
     robot_base_frame: "base"        # ロボットのベースフレーム名 (例: fr3_link0)
     ee_link: "fr3_link8"            # エンドエフェクタのフレーム名 (例: fr3_hand_tcp)
-
+    feedback_wrench_sensor_frame: "fr3_link8"
     # トピック名
     joint_trajectory_controller_command_topic: "/fr3_arm_controller/joint_trajectory"
     cartesian_motion_controller_command_topic: "/cartesian_motion_controller/target_frame"

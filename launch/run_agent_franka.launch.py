@@ -20,6 +20,23 @@ def generate_launch_description():
 
     gello_ros_share_dir = get_package_share_directory('gello_ros')
 
+    # Robot description generation for Franka FR3
+    robot_description_content = Command(
+        [
+            PathJoinSubstitution([FindExecutable(name="xacro")]),
+            " ",
+            PathJoinSubstitution([FindPackageShare("franka_description"), "robots", "fr3", "fr3.urdf.xacro"]),
+            " ",
+            "hand:=true",
+            " ",
+            "ee_id:=franka_hand",
+            " ",
+            "robot_ip:=192.168.1.1",
+        ]
+    )
+    robot_description = {
+        "robot_description": ParameterValue(value=robot_description_content, value_type=str)
+    }
 
     return LaunchDescription([
         DeclareLaunchArgument(
@@ -63,6 +80,7 @@ def generate_launch_description():
             parameters=[
                 robot_config,
                 common_config,
+                robot_description,
                 {
                     'save_episode': save_episode,
                     'agent_type': agent_type,
