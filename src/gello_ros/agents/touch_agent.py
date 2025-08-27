@@ -138,16 +138,12 @@ class TouchAgent(Agent, Node):
             self.get_logger().info(f"KDL初期化が完了しました: {self.kdl_helper._num_jnts} joints")
             
             # 静的TF変換の取得（robot_base_frame <-> touch_base_frame）
-            if self.teleop_mode == "bilateral":
-                self.get_logger().info("静的TF変換を取得中...")
-                self._get_static_transform()
-                if self.static_transform is not None:
-                    self.get_logger().info("静的TF変換の取得が完了しました")
-                else:
-                    self.get_logger().warn("静的TF変換の取得に失敗しました")
+            self.get_logger().info("静的TF変換を取得中...")
+            self._get_static_transform()
+            if self.static_transform is not None:
+                self.get_logger().info("静的TF変換の取得が完了しました")
             else:
-                self.get_logger().info("unilateralモードのため、静的TF変換をスキップしました")
-                self.static_transform = None
+                self.get_logger().warn("静的TF変換の取得に失敗しました")
                 
         except Exception as e:
             self.get_logger().error(f"KDL初期化に失敗: {e}")
@@ -356,14 +352,42 @@ class TouchAgent(Agent, Node):
     ) -> np.ndarray:
         """
         Touchデバイスの移動量からロボットの目標姿勢を計算します。
+        座標変換：touch_base_frame -> robot_base_frame
         """
-        pos_diff = touch_current[:3] - touch_start[:3]
-        start_rot = R.from_quat(touch_start[3:])
-        current_rot = R.from_quat(touch_current[3:])
-        relative_rot = current_rot * start_rot.inv()
+        # Touchデバイス座標系での移動量（touchdiff）を計算
+        touch_pos_diff = touch_current[:3] - touch_start[:3]
+        touch_start_rot = R.from_quat(touch_start[3:])
+        touch_current_rot = R.from_quat(touch_current[3:])
+        touch_relative_rot = touch_current_rot * touch_start_rot.inv()
+        
+        # 静的変換行列が利用可能な場合は座標変換を行う
+        if self.static_transform is not None:
+            # touch_base_frame -> robot_base_frameの変換行列を取得
+            # static_transformは robot_base_frame -> touch_base_frame なので逆変換を使用
+            robot_to_touch_transform = self.static_transform
+            touch_to_robot_transform = np.linalg.inv(robot_to_touch_transform)
+            
+            # 位置の変換（回転のみ適用、並進は加算しない）
+            R_touch_to_robot = touch_to_robot_transform[:3, :3]
+            robot_pos_diff = R_touch_to_robot @ touch_pos_diff
+            
+            # 回転の変換
+            # Touch座標系の相対回転をロボット座標系に変換
+            touch_relative_rot_matrix = touch_relative_rot.as_matrix()
+            robot_relative_rot_matrix = R_touch_to_robot @ touch_relative_rot_matrix @ R_touch_to_robot.T
+            robot_relative_rot = R.from_matrix(robot_relative_rot_matrix)
+            
+        else:
+            # 静的変換が利用できない場合は直接使用（フォールバック）
+            self.get_logger().warn("静的変換が利用できないため、座標変換をスキップしています")
+            robot_pos_diff = touch_pos_diff
+            robot_relative_rot = touch_relative_rot
+        
+        # ロボットの新しい姿勢を計算
         robot_start_rot = R.from_quat(robot_start[3:])
-        new_robot_rot = relative_rot * robot_start_rot
-        new_robot_pos = robot_start[:3] + pos_diff
+        new_robot_rot = robot_relative_rot * robot_start_rot
+        new_robot_pos = robot_start[:3] + robot_pos_diff
+        
         return np.concatenate((new_robot_pos, new_robot_rot.as_quat()))
 
     def act(self, obs: Dict[str, np.ndarray], force_pose_update: bool = False) -> Dict:
