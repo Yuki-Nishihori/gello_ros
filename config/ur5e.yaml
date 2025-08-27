@@ -1,5 +1,6 @@
 /**:
   ros__parameters:
+    control_hz: 500
 
     joint_names_order:
       - "shoulder_pan_joint"
@@ -44,7 +45,7 @@
     joint_states_topic: "/joint_states"
     robot_description_name: "/robot_description"
 
-    gello_home_joints:
+    robot_home_joints_with_gello:
       - !degrees  -90.0  # shoulder_pan_joint
       - !degrees  -90.0  # shoulder_lift_joint
       - !degrees  -90.0  # elbow_joint
@@ -52,7 +53,7 @@
       - !degrees  90.0  # wrist_2_joint
       - !degrees  0.0  # wrist_3_joint
 
-    touch_home_pose:
+    robot_home_pose_with_touch:
       - 0.308
       - 0.263
       - 0.1
@@ -62,7 +63,7 @@
       - 0.0
 
 
-    touch_start_pose:
+    robot_start_pose_with_touch:
       - 0.308
       - 0.263
       - 0.02

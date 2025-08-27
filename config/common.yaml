@@ -1,7 +1,6 @@
 /**:
   ros__parameters:
     # operation config
-    control_hz: 500
     touch_ee_pose_topic:  "/touch/tip_pose"
     touch_button_topic: "/touch/button"
     touch_force_feedback_topic: "/touch/force_feedback"

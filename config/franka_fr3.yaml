@@ -1,0 +1,76 @@
+/**:
+  ros__parameters:
+    control_hz: 1000
+
+    # Franka Robot (fr3) のジョイント名
+    joint_names_order:
+      - "fr3_joint1"
+      - "fr3_joint2"
+      - "fr3_joint3"
+      - "fr3_joint4"
+      - "fr3_joint5"
+      - "fr3_joint6"
+      - "fr3_joint7"
+
+    # 各ジョイントの最大速度 [rad/s]
+    joint_max_vel:
+      - 2.62
+      - 2.62
+      - 2.62
+      - 2.62
+      - 5.26
+      - 4.18
+      - 5.26
+
+    # 各ジョイントの可動域（下限） [rad]
+    joint_pos_limits_lower:
+      - -2.7437
+      - -1.7837
+      - -2.9007
+      - -3.0421
+      - -2.8065
+      -  0.5445
+      - -3.0159
+
+    # 各ジョイントの可動域（上限） [rad]
+    joint_pos_limits_upper:
+      -  2.7437
+      -  1.7837
+      -  2.9007
+      - -0.1518
+      -  2.8065
+      -  4.5169
+      -  3.0159
+
+    # --- 以下のパラメータはご自身の環境に合わせて確認・修正してください ---
+    move_group_name: "fr3_manipulator" # MoveItのプランニンググループ名 (例: panda_manipulator)
+    robot_base_frame: "base"        # ロボットのベースフレーム名 (例: fr3_link0)
+    ee_link: "fr3_link8"            # エンドエフェクタのフレーム名 (例: fr3_hand_tcp)
+
+    # トピック名
+    joint_trajectory_controller_command_topic: "/fr3_arm_controller/joint_trajectory"
+    cartesian_motion_controller_command_topic: "/cartesian_motion_controller/target_frame"
+    cartesian_compliance_controller_command_topic: "/cartesian_compliance_controller/target_frame"
+    cartesian_impedance_controller_command_topic: "/cartesian_impedance_controller/target_frame"
+    joint_states_topic: "/joint_states"
+    robot_description_name: "/robot_description"
+
+
+    robot_home_pose_with_touch:
+      - 0.308
+      - 0.263
+      - 0.1
+      - 0.0
+      - 1.0 
+      - 0.0
+      - 0.0
+
+
+    robot_start_pose_with_touch:
+      - 0.308
+      - 0.263
+      - 0.02
+      - 0.0
+      - 1.0 
+      - 0.0
+      - 0.0

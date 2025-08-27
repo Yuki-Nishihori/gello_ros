@@ -24,7 +24,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             'robot_config',
-            default_value=os.path.join(gello_ros_share_dir, 'config', 'ur5e.yaml'),
+            default_value=os.path.join(gello_ros_share_dir, 'config', 'franka_fr3.yaml'),
             description='Path to the robot config file'),
         DeclareLaunchArgument(
             'common_config',
@@ -52,7 +52,7 @@ def generate_launch_description():
             description='Whether to skip the initial move'),
         DeclareLaunchArgument(
             'controller_type',
-            default_value='cartesian_impidance_controller',
+            default_value='cartesian_impedance_controller',
             description='Controller type'),
 
         Node(

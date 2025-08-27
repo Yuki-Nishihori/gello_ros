@@ -34,7 +34,7 @@ class TouchAgent(Agent, Node):
 
         # メンバ変数の初期化
         self._touch_current_pose: np.ndarray | None = None
-        self._touch_start_pose: np.ndarray | None = None
+        self._robot_start_pose_with_touch: np.ndarray | None = None
         self._robot_start_pose: np.ndarray | None = None
         self._robot_current_pose: np.ndarray | None = None
         self._last_target_pose: np.ndarray | None = None  # 最後に計算された目標姿勢
@@ -398,7 +398,7 @@ class TouchAgent(Agent, Node):
             else:
                 self._robot_start_pose = current_ee_pose
             
-            self._touch_start_pose = self._touch_current_pose
+            self._robot_start_pose_with_touch = self._touch_current_pose
             self.get_logger().info("テレオペレーション開始")
         elif not self._is_teleop_active and self._was_teleop_active:
             # ボタンを離した時点で、最後に計算された目標姿勢を保存（current_ee_poseではなく）
@@ -413,18 +413,18 @@ class TouchAgent(Agent, Node):
         target_pose = np.zeros(7)
         if self._is_teleop_active:
             self.get_logger().debug("  - Teleoperation ACTIVE")
-            if self._touch_start_pose is not None and self._robot_start_pose is not None:
+            if self._robot_start_pose_with_touch is not None and self._robot_start_pose is not None:
                 if self._is_z_lock_active:
                     self.get_logger().debug("  - Z-lock mode")
                     target_pose = self.calculate_pose_difference(
-                        self._touch_start_pose, self._touch_current_pose, self._robot_start_pose
+                        self._robot_start_pose_with_touch, self._touch_current_pose, self._robot_start_pose
                     )
                     target_pose[3:] = self.z_down_quat
                     self._last_target_pose = target_pose.copy()  # 計算した目標姿勢を保存
                 else:
                     self.get_logger().debug("  - Free mode")
                     target_pose = self.calculate_pose_difference(
-                        self._touch_start_pose, self._touch_current_pose, self._robot_start_pose
+                        self._robot_start_pose_with_touch, self._touch_current_pose, self._robot_start_pose
                     )
                     self._last_target_pose = target_pose.copy()  # 計算した目標姿勢を保存
             else:

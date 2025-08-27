@@ -75,9 +75,9 @@ class AgentNode(Node):
         self.declare_parameter("agent_type", "gello")
         self.declare_parameter("camera_names", [""])
         self.declare_parameter("control_hz", 100)
-        self.declare_parameter("gello_home_joints", [0.0])
-        self.declare_parameter("touch_home_pose", [0.0])
-        self.declare_parameter("touch_start_pose", [0.0])
+        self.declare_parameter("robot_home_joints_with_gello", [0.0])
+        self.declare_parameter("robot_home_pose_with_touch", [0.0])
+        self.declare_parameter("robot_start_pose_with_touch", [0.0])
         self.declare_parameter("controller_type", "cartesian_impedance_controller")
         self.declare_parameter("control_mode", "cartesian")
         self.declare_parameter("use_gripper", False)
@@ -94,9 +94,9 @@ class AgentNode(Node):
         self.agent_type = self.get_parameter("agent_type").get_parameter_value().string_value
         self.camera_names = self.get_parameter("camera_names").get_parameter_value().string_array_value
         self.hz = self.get_parameter("control_hz").get_parameter_value().integer_value
-        self.gello_home_joints = self.get_parameter("gello_home_joints").get_parameter_value().double_array_value
-        self.touch_home_pose = self.get_parameter("touch_home_pose").get_parameter_value().double_array_value
-        self.touch_start_pose = self.get_parameter("touch_start_pose").get_parameter_value().double_array_value
+        self.robot_home_joints_with_gello = self.get_parameter("robot_home_joints_with_gello").get_parameter_value().double_array_value
+        self.robot_home_pose_with_touch = self.get_parameter("robot_home_pose_with_touch").get_parameter_value().double_array_value
+        self.robot_start_pose_with_touch = self.get_parameter("robot_start_pose_with_touch").get_parameter_value().double_array_value
         self.controller_type = self.get_parameter("controller_type").get_parameter_value().string_value
         self.control_mode = self.get_parameter("control_mode").get_parameter_value().string_value
         self.use_gripper = self.get_parameter("use_gripper").get_parameter_value().bool_value
@@ -203,7 +203,7 @@ class AgentNode(Node):
                         "No gello port found, please specify one or plug in gello"
                     )
 
-            gello_reset_joints = np.array(self.gello_home_joints)
+            gello_reset_joints = np.array(self.robot_home_joints_with_gello)
             self.agent = GelloAgent()
             time.sleep(1)
 
@@ -291,9 +291,9 @@ class AgentNode(Node):
             print("Using 3D Systems Touch agent")
             # Initialize the touch agent
             self.agent = TouchAgent()
-            # Move the robot towards the touch_home_pose until it's close enough
+            # Move the robot towards the robot_home_pose_with_touch until it's close enough
             if not self.skip_initial_move:
-                action = {"ee_pos": self.touch_home_pose[:3], "ee_quat": self.touch_home_pose[3:]}
+                action = {"ee_pos": self.robot_home_pose_with_touch[:3], "ee_quat": self.robot_home_pose_with_touch[3:]}
                 self.env.step(action)
                 time.sleep(5)
             # Initialize obs
@@ -363,7 +363,7 @@ class AgentNode(Node):
                             pass
                         elif self.agent_type == "touch":
                             if not self.skip_initial_move:
-                                action = {"ee_pos": self.touch_start_pose[:3], "ee_quat": self.touch_start_pose[3:]}
+                                action = {"ee_pos": self.robot_start_pose_with_touch[:3], "ee_quat": self.robot_start_pose_with_touch[3:]}
                                 self.obs = self.env.step(action)
                                 time.sleep(5)
                                 self.obs = self.env.step(action)
@@ -425,7 +425,7 @@ class AgentNode(Node):
                         raise ValueError(f"Invalid state {self.button_state}")
                 elif self.agent_type == "act":
                     # Initialize position and observation
-                    action = {"ee_pos": self.touch_start_pose[:3], "ee_quat": self.touch_start_pose[3:]}
+                    action = {"ee_pos": self.robot_start_pose_with_touch[:3], "ee_quat": self.robot_start_pose_with_touch[3:]}
                     self.obs = self.env.step(action)
                     time.sleep(5)
                     self.obs = self.env.step(action)
