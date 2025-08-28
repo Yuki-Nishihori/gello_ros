@@ -10,7 +10,7 @@ def generate_launch_description():
     # Declare launch arguments
     device_arg = DeclareLaunchArgument(
         'device',
-        default_value='/dev/video1',
+        default_value='/dev/video0',
         description='UVC camera device path'
     )
     
