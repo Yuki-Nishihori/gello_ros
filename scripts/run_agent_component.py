@@ -26,6 +26,7 @@ import rclpy
 from rclpy.node import Node
 from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.parameter import Parameter, ParameterType
+from rclpy.qos import qos_profile_sensor_data
 from geometry_msgs.msg import Wrench, PoseStamped
 from sensor_msgs.msg import Image
 from std_msgs.msg import String, Header
@@ -145,7 +146,7 @@ class AgentNode(Node):
                 Image,
                 f"/{camera_name}/color/image_raw",
                 partial(self._camera_color_callback, camera_name),
-                1  # QoS depth
+                qos_profile_sensor_data,
             )
             self.get_logger().info(f"Subscribed to /{camera_name}/color/image_raw")
 
