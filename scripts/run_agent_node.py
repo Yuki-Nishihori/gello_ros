@@ -86,7 +86,7 @@ class AgentNode(Node):
         self.declare_parameter("save_episode", False)
         self.declare_parameter("gello_port", "")
         self.declare_parameter("number_of_episodes", 1)
-        self.declare_parameter("number_of_steps", 1000)
+        self.declare_parameter("number_of_steps", 10000)
         self.declare_parameter("eval_ckpt_dir", "policy_last.ckpt")
 
     def get_parameters(self):
@@ -358,6 +358,9 @@ class AgentNode(Node):
             while rclpy.ok():
                 if self.use_save_interface:
                     if self.button_state == "start":
+                        # TouchAgentの場合はspinを実行してコールバックを処理
+                        if self.agent_type == "touch":
+                            rclpy.spin_once(self.agent, timeout_sec=0.001)
                         print("\nMoving to the start pose")
                         if self.agent_type == "gello":
                             pass
@@ -385,8 +388,7 @@ class AgentNode(Node):
                             step_st = time.time()
                             action = self.agent.act(self.obs)
                             self.obs = self.env.step(action)
-                            for camera_name in self.camera_names:
-                                self.obs[f"{camera_name}_rgb"] = self.camera_images.get(camera_name)
+                            #     self.obs[f"{camera_name}_rgb"] = self.camera_images.get(camera_name)
                             action_replay.append(action)
                             obs_replay.append(self.obs)
                             message = f"\rEpisode number: {current_episode_number} Time passed: {round(time.time() - st_episode, 2)},\tTime for step: {round((time.time() - step_st)*1000,1)} ms   "
@@ -406,9 +408,12 @@ class AgentNode(Node):
                         current_episode_number += 1
 
                     elif self.button_state == "pass":
+                        # TouchAgentの場合はspinを実行してコールバックを処理
+                        if self.agent_type == "touch":
+                            rclpy.spin_once(self.agent, timeout_sec=0.001)
                         step_st = time.time()
                         action = self.agent.act(self.obs)
-                        print("ee_euler", self.obs["ee_euler"])
+                        # print("ee_euler", self.obs["ee_euler"])
                         self.obs = self.env.step(action)
                         message = f"\rWaiting for the next episode.\tTime for step: {round((time.time() - step_st)*1000,1)} ms   "
                         print_color(
