@@ -46,7 +46,7 @@ class TouchAgent(Agent, Node):
         self._is_z_lock_active = False  # 灰ボタンが押されているか
         
         # Z軸下向きの回転（固定値）
-        self.z_down_quat = R.from_euler('xyz', [0, np.pi, 0]).as_quat()
+        self.z_down_quat = R.from_euler('xyz', [0, np.pi, np.pi]).as_quat()
 
         # ROS関連の設定
         self._setup_parameters()
@@ -469,7 +469,7 @@ class TouchAgent(Agent, Node):
 
         target_quat = target_pose[3:]
         action_dict = {
-            "joint_positions": np.zeros(6),
+            "joint_positions": np.zeros(len(obs["joint_positions"])),
             "ee_pos": target_pose[:3],
             "ee_quat": target_quat,
             "ee_rot_matrix": R.from_quat(target_quat).as_matrix(),
