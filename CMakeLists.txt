@@ -10,6 +10,7 @@ find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_python REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclpy REQUIRED)
+find_package(rclcpp_components REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
@@ -24,6 +25,7 @@ ament_python_install_package(${PROJECT_NAME}
 # Install Python scripts
 install(PROGRAMS
   scripts/run_agent_node.py
+  scripts/run_agent_component.py
   scripts/run_gello.py
   scripts/run_GUI.py
   scripts/train.py
@@ -43,6 +45,10 @@ install(DIRECTORY config/
 )
 
 # Python modules are installed by ament_python_install_package
+
+# Register Python component for ComponentManager
+# Note: Python components are registered differently from C++ components
+# The component discovery is done through Python entry points
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
