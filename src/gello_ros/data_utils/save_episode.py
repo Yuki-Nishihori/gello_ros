@@ -22,8 +22,11 @@ def save_episode(node: Node, episode_number: int, obs_replay: List[Dict], action
     # node.declare_parameter("camera_width", 640)
     # node.declare_parameter("camera_height", 480)
     # node.declare_parameter("wrench_dim", 6)
-    node.declare_parameter("save_episode_dir", "./episode_data")
-    node.declare_parameter("task_name", "default")
+    # Check if parameters are already declared to avoid duplication
+    if not node.has_parameter("save_episode_dir"):
+        node.declare_parameter("save_episode_dir", "./episode_data")
+    if not node.has_parameter("task_name"):
+        node.declare_parameter("task_name", "default")
     # node.declare_parameter("use_FT_sensor", False)
 
     # 宣言したパラメータの値を取得
