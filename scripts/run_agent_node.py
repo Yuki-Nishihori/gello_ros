@@ -26,9 +26,9 @@ import rclpy
 from rclpy.node import Node
 from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.parameter import Parameter, ParameterType
-from geometry_msgs.msg import Wrench
+from geometry_msgs.msg import Wrench, PoseStamped
 from sensor_msgs.msg import Image
-from std_msgs.msg import String
+from std_msgs.msg import String, Header
 from cv_bridge import CvBridge
 import threading
 import asyncio
@@ -52,6 +52,13 @@ class AgentNode(Node):
         self.button_state = "pass"
         self.bridge = CvBridge()
         
+        # Create publisher for home pose debug
+        self.home_pose_publisher = self.create_publisher(
+            PoseStamped,
+            '/debug/home_pose',
+            10
+        )
+        
         # Declare parameters with default values
         self._declare_parameters()
         
@@ -61,14 +68,20 @@ class AgentNode(Node):
         # Initialize subscribers if needed
         if self.use_save_interface:
             self.start_button_subscriber()
+            self.get_logger().info(f"Save interface enabled, listening to /button_state")
         
         # Initialize camera subscribers
         if not self.mock and self.camera_names:
             self.start_camera_subscribers()
             
+        
+            
         # Initialize robot and agent
         self.initialize_robot()
         self.initialize_agent()
+        
+        # Publish home pose for debug
+        self.publish_home_pose_debug()
 
     def _declare_parameters(self):
         """Declare all ROS2 parameters with default values"""
@@ -91,6 +104,7 @@ class AgentNode(Node):
 
     def get_parameters(self):
         """Get all parameters from ROS2 parameter server"""
+        self.get_logger().info(f"Getting ROS parameters...")
         self.agent_type = self.get_parameter("agent_type").get_parameter_value().string_value
         self.camera_names = self.get_parameter("camera_names").get_parameter_value().string_array_value
         self.hz = self.get_parameter("control_hz").get_parameter_value().integer_value
@@ -128,6 +142,7 @@ class AgentNode(Node):
                 partial(self._camera_color_callback, camera_name),
                 1  # QoS depth
             )
+            self.get_logger().info(f"Subscribed to /{camera_name}_camera/color/image_raw")
 
     def _button_callback(self, msg: String):
         """Callback for button state"""
@@ -341,6 +356,28 @@ class AgentNode(Node):
             raise NotImplementedError("add your imitation policy here if there is one")
         else:
             raise ValueError("Invalid agent type: %s" % self.agent_type)
+    
+    def publish_home_pose_debug(self):
+        """Publish robot_home_pose_with_touch as PoseStamped for RViz visualization"""
+        if len(self.robot_home_pose_with_touch) >= 7:
+            pose_msg = PoseStamped()
+            pose_msg.header = Header()
+            pose_msg.header.stamp = self.get_clock().now().to_msg()
+            pose_msg.header.frame_id = "base"  # または適切なベースフレーム
+            
+            # Position (x, y, z)
+            pose_msg.pose.position.x = self.robot_home_pose_with_touch[0]
+            pose_msg.pose.position.y = self.robot_home_pose_with_touch[1]
+            pose_msg.pose.position.z = self.robot_home_pose_with_touch[2]
+            
+            # Orientation (quaternion: x, y, z, w)
+            pose_msg.pose.orientation.x = self.robot_home_pose_with_touch[3]
+            pose_msg.pose.orientation.y = self.robot_home_pose_with_touch[4]
+            pose_msg.pose.orientation.z = self.robot_home_pose_with_touch[5]
+            pose_msg.pose.orientation.w = self.robot_home_pose_with_touch[6]
+            
+            self.home_pose_publisher.publish(pose_msg)
+            self.get_logger().info(f"Published home pose: pos({pose_msg.pose.position.x:.3f}, {pose_msg.pose.position.y:.3f}, {pose_msg.pose.position.z:.3f})")
 
     def save_episode_thread(self, episode_number, obs_replay, action_replay):
         """Thread function for saving episodes"""
