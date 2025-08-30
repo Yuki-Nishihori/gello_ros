@@ -6,6 +6,7 @@ import rclpy
 from geometry_msgs.msg import PoseStamped, WrenchStamped
 from rclpy.duration import Duration
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from scipy.spatial.transform import Rotation as R
 from touch_msgs.msg import TouchButtonEvent, TouchFeedback
 
@@ -100,10 +101,10 @@ class TouchAgent(Agent, Node):
             PoseStamped, "touch_debug_action_pose_rviz", 10
         )
         self.pose_sub = self.create_subscription(
-            PoseStamped, self.ee_pose_topic, self.pose_callback, 10
+            PoseStamped, self.ee_pose_topic, self.pose_callback, qos_profile_sensor_data
         )
         self.button_sub = self.create_subscription(
-            TouchButtonEvent, self.button_topic, self.button_callback, 10
+            TouchButtonEvent, self.button_topic, self.button_callback, qos_profile_sensor_data
         )
 
     def _setup_tf(self) -> None:
@@ -423,14 +424,14 @@ class TouchAgent(Agent, Node):
                 self._robot_start_pose = current_ee_pose
             
             self._robot_start_pose_with_touch = self._touch_current_pose
-            self.get_logger().info("テレオペレーション開始")
+            # self.get_logger().info("テレオペレーション開始")
         elif not self._is_teleop_active and self._was_teleop_active:
             # ボタンを離した時点で、最後に計算された目標姿勢を保存（current_ee_poseではなく）
             if self._last_target_pose is not None:
                 self._robot_current_pose = self._last_target_pose.copy()
             else:
                 self._robot_current_pose = current_ee_pose
-            self.get_logger().info("テレオペレーション終了")
+            # self.get_logger().info("テレオペレーション終了")
         
         self._was_teleop_active = self._is_teleop_active
 
