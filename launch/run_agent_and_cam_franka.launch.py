@@ -217,7 +217,7 @@ def launch_setup(context, *args, **kwargs):
         period=agent_start_delay,
         actions=[agent_node]
     )
-    # nodes_to_launch.append(delayed_agent)
+    nodes_to_launch.append(delayed_agent)
     
     return nodes_to_launch
 

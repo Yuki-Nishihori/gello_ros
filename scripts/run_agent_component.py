@@ -74,9 +74,6 @@ class AgentNode(Node):
         # Initialize camera subscribers
         if not self.mock and self.camera_names:
             self.start_camera_subscribers()
-            
-        
-            
         # Initialize robot and agent
         self.initialize_robot()
         self.initialize_agent()
@@ -100,7 +97,7 @@ class AgentNode(Node):
         self.declare_parameter("control_mode", "cartesian")
         self.declare_parameter("use_gripper", False)
         self.declare_parameter("use_FT_sensor", False)
-        self.declare_parameter("skip_initial_move", False)
+        self.declare_parameter("skip_initial_move", True)
         self.declare_parameter("save_episode", False)
         self.declare_parameter("gello_port", "")
         self.declare_parameter("number_of_episodes", 1)
@@ -544,14 +541,12 @@ class AgentNode(Node):
         try:
             while rclpy.ok() and not self.shutdown_requested:
                 if self.use_save_interface:
-                    if self.button_state == "start":
-                        # TouchAgentの場合はspinを実行してコールバックを処理
-                        if self.agent_type == "touch":
-                            rclpy.spin_once(self.agent, timeout_sec=0.001)
+                    if self.button_state == "start":                           
                         self.get_logger().info("Moving to the start pose")
                         if self.agent_type == "gello":
                             pass
                         elif self.agent_type == "touch":
+                            rclpy.spin_once(self.agent, timeout_sec=0.001)
                             if not self.skip_initial_move:
                                 action = {"ee_pos": self.robot_start_pose_with_touch[:3], "ee_quat": self.robot_start_pose_with_touch[3:]}
                                 self.obs = self.env.step(action)
