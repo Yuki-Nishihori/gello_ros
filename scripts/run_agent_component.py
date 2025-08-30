@@ -90,6 +90,9 @@ class AgentNode(Node):
         """Declare all ROS2 parameters with default values"""
         self.declare_parameter("agent_type", "gello")
         self.declare_parameter("camera_names", [""])
+        self.declare_parameter("camera_width", 640)
+        self.declare_parameter("camera_height", 480)
+        self.declare_parameter("wrench_dim", 6)
         self.declare_parameter("control_hz", 100)
         self.declare_parameter("robot_home_joints_with_gello", [0.0])
         self.declare_parameter("robot_home_pose_with_touch", [0.0])
