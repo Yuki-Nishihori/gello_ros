@@ -566,6 +566,16 @@ class AgentNode(Node):
                             break
                         st_episode = time.time()
                         for i in range(self.number_of_steps):
+                            # Process callbacks to get latest sensor data and button states
+                            rclpy.spin_once(self, timeout_sec=0.001)
+                            if self.agent_type == "touch":
+                                rclpy.spin_once(self.agent, timeout_sec=0.001)
+
+                            # Check if user wants to quit mid-episode
+                            if self.button_state == "quit":
+                                self.get_logger().info("Quit command received during episode, stopping.")
+                                break
+                            
                             step_st = time.time()
                             action = self.agent.act(self.obs)
                             self.obs = self.env.step(action)
