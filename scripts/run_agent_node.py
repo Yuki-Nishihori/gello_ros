@@ -34,13 +34,6 @@ import threading
 import asyncio
 
 
-def print_color(*args, color=None, attrs=(), **kwargs):
-    import termcolor
-
-    if len(args) > 0:
-        args = tuple(termcolor.colored(arg, color=color, attrs=attrs) for arg in args)
-    print(*args, **kwargs)
-
 
 class AgentNode(Node):
     def __init__(self):
@@ -51,6 +44,7 @@ class AgentNode(Node):
         self.camera_images = {}
         self.button_state = "pass"
         self.bridge = CvBridge()
+        self.shutdown_requested = False
         
         # Create publisher for home pose debug
         self.home_pose_publisher = self.create_publisher(
@@ -205,14 +199,14 @@ class AgentNode(Node):
         if self.agent_type == "gello":
             assert self.control_mode in "joint"
             self.env = RobotEnv(self.robot, control_rate_hz=self.hz, camera_dict=self.camera_clients, control_mode=self.control_mode)
-            print("Using Gello agent")
+            self.get_logger().info("Using Gello agent")
             
             if self.gello_port is None:
                 usb_ports = glob.glob("/dev/serial/by-id/*")
-                print(f"Found {len(usb_ports)} ports")
+                self.get_logger().info(f"Found {len(usb_ports)} ports")
                 if len(usb_ports) > 0:
                     self.gello_port = usb_ports[0]
-                    print(f"using port {self.gello_port}")
+                    self.get_logger().info(f"using port {self.gello_port}")
                 else:
                     raise ValueError(
                         "No gello port found, please specify one or plug in gello"
@@ -225,7 +219,7 @@ class AgentNode(Node):
             # Start the gello agent
             obs = self.env.get_obs()
             robot_joints = obs["joint_positions"]
-            print(f"Robot joints: {robot_joints}")
+            self.get_logger().info(f"Robot joints: {robot_joints}")
 
             gello_curr_joints = np.array(self.env.get_obs()["joint_positions"])
 
@@ -238,15 +232,15 @@ class AgentNode(Node):
 
             # preprocess the agent start position
             agent_start_pos = self.agent.act(self.env.get_obs())
-            print(f"Gello agent start pos: {agent_start_pos}")
+            self.get_logger().info(f"Gello agent start pos: {agent_start_pos}")
 
             # check if the joints are close
             abs_deltas = np.abs(agent_start_pos - robot_joints)
             id_max_joint_delta = np.argmax(abs_deltas)
-            print(f"Agent start pos: {agent_start_pos}", f"Robot joints: {robot_joints}")
+            self.get_logger().info(f"Agent start pos: {agent_start_pos}, Robot joints: {robot_joints}")
             max_joint_delta = 0.8
             if abs_deltas[id_max_joint_delta] > max_joint_delta:
-                print("Joint deltas are too big, please check the following joints")
+                self.get_logger().warn("Joint deltas are too big, please check the following joints")
 
                 id_mask = abs_deltas > max_joint_delta
                 ids = np.arange(len(id_mask))[id_mask]
@@ -256,7 +250,7 @@ class AgentNode(Node):
                     agent_start_pos[id_mask],
                     robot_joints[id_mask],
                 ):
-                    print(
+                    self.get_logger().warn(
                         f"joint[{i}]: \t delta: {delta:4.3f} , leader: \t{joint:4.3f} , follower: \t{current_j:4.3f}"
                     )
                 return
@@ -283,14 +277,14 @@ class AgentNode(Node):
             joints = obs["joint_positions"]
             action = self.agent.act(obs)
             if (action - joints > 0.5).any():
-                print("Action is too big")
-                print("action", action)
-                print("joints", joints)
+                self.get_logger().warn("Action is too big")
+                self.get_logger().warn(f"action: {action}")
+                self.get_logger().warn(f"joints: {joints}")
 
                 # print which joints are too big
                 joint_index = np.where(action - joints > 0.8)
                 for j in joint_index:
-                    print(
+                    self.get_logger().warn(
                         f"Joint [{j}], leader: {action[j]}, follower: {joints[j]}, diff: {action[j] - joints[j]}"
                     )
                 return
@@ -303,11 +297,12 @@ class AgentNode(Node):
         elif self.agent_type == "touch":
             assert self.control_mode in "cartesian"
             self.env = RobotEnv(self.robot, control_rate_hz=self.hz, camera_dict=self.camera_clients, control_mode=self.control_mode)
-            print("Using 3D Systems Touch agent")
+            self.get_logger().info("Using 3D Systems Touch agent")
             # Initialize the touch agent
             self.agent = TouchAgent()
             # Move the robot towards the robot_home_pose_with_touch until it's close enough
             if not self.skip_initial_move:
+                self.get_logger().info("Moving to the home pose")
                 action = {"ee_pos": self.robot_home_pose_with_touch[:3], "ee_quat": self.robot_home_pose_with_touch[3:]}
                 self.env.step(action)
                 time.sleep(5)
@@ -332,14 +327,14 @@ class AgentNode(Node):
             # load the policy
             policy = make_policy(policy_config["policy_class"], policy_config)
             eval_ckpt_file = os.path.join(self.eval_ckpt_dir, "policy_last.ckpt")
-            print("Loading checkpoint: ", eval_ckpt_file)
+            self.get_logger().info(f"Loading checkpoint: {eval_ckpt_file}")
             loading_status = policy.load_state_dict(
                 torch.load(eval_ckpt_file, map_location=torch.device(device))
             )
-            print(loading_status)
+            self.get_logger().info(f"Loading status: {loading_status}")
             policy.to(device)
             policy.eval()
-            print("ACT policy loaded")
+            self.get_logger().info("ACT policy loaded")
             if self.camera_names is None:
                 raise ValueError("Camera names not provided")
             self.agent = ACTAgent(
@@ -382,23 +377,42 @@ class AgentNode(Node):
     def save_episode_thread(self, episode_number, obs_replay, action_replay):
         """Thread function for saving episodes"""
         save_episode(self, episode_number, obs_replay, action_replay)
+    
+    def cleanup(self):
+        """Clean up resources before shutdown"""
+        self.get_logger().info("Starting cleanup...")
+        try:
+            if hasattr(self, 'robot') and self.robot is not None:
+                # Stop any ongoing robot motions
+                self.get_logger().info("Stopping robot...")
+                # Add robot-specific cleanup if needed
+                
+            if hasattr(self, 'agent') and self.agent is not None:
+                # Cleanup agent resources
+                self.get_logger().info("Cleaning up agent...")
+                if hasattr(self.agent, 'cleanup'):
+                    self.agent.cleanup()
+                    
+            self.get_logger().info("Cleanup completed")
+        except Exception as e:
+            self.get_logger().error(f"Error during cleanup: {e}")
 
     def run(self):
         """Main execution loop"""
-        print_color("\nStart 🚀🚀🚀", color="green", attrs=("bold",))
+        self.get_logger().info("Start 🚀🚀🚀")
         start_time = time.time()
         current_episode_number = 0
         current_save_thread = None
         message = ""
         
         try:
-            while rclpy.ok():
+            while rclpy.ok() and not self.shutdown_requested:
                 if self.use_save_interface:
                     if self.button_state == "start":
                         # TouchAgentの場合はspinを実行してコールバックを処理
                         if self.agent_type == "touch":
                             rclpy.spin_once(self.agent, timeout_sec=0.001)
-                        print("\nMoving to the start pose")
+                        self.get_logger().info("Moving to the start pose")
                         if self.agent_type == "gello":
                             pass
                         elif self.agent_type == "touch":
@@ -414,11 +428,11 @@ class AgentNode(Node):
                         obs_replay = []
                         action_replay = []
                         if current_save_thread is not None and current_save_thread.is_alive():
-                            print("Can't start new episode, current episode is still saving")
+                            self.get_logger().warn("Can't start new episode, current episode is still saving")
                             self.button_state = "pass"
                             continue
                         if (current_episode_number + 1) > self.number_of_episodes:
-                            print("All episodes done")
+                            self.get_logger().info("All episodes done")
                             break
                         st_episode = time.time()
                         for i in range(self.number_of_steps):
@@ -428,16 +442,10 @@ class AgentNode(Node):
                             #     self.obs[f"{camera_name}_rgb"] = self.camera_images.get(camera_name)
                             action_replay.append(action)
                             obs_replay.append(self.obs)
-                            message = f"\rEpisode number: {current_episode_number} Time passed: {round(time.time() - st_episode, 2)},\tTime for step: {round((time.time() - step_st)*1000,1)} ms   "
-                            print_color(
-                                message,
-                                color="white",
-                                attrs=("bold",),
-                                end="",
-                                flush=True,
-                            )
+                            message = f"Episode number: {current_episode_number} Time passed: {round(time.time() - st_episode, 2)}, Time for step: {round((time.time() - step_st)*1000,1)} ms"
+                            self.get_logger().info(message)
 
-                        print("Episode done, saving now")
+                        self.get_logger().info("Episode done, saving now")
                         current_save_thread = threading.Thread(target=self.save_episode_thread, args=(current_episode_number, obs_replay, action_replay))
                         current_save_thread.start()
 
@@ -452,16 +460,10 @@ class AgentNode(Node):
                         action = self.agent.act(self.obs)
                         # print("ee_euler", self.obs["ee_euler"])
                         self.obs = self.env.step(action)
-                        message = f"\rWaiting for the next episode.\tTime for step: {round((time.time() - step_st)*1000,1)} ms   "
-                        print_color(
-                            message,
-                            color="white",
-                            attrs=("bold",),
-                            end="",
-                            flush=True,
-                        )
+                        message = f"Waiting for the next episode. Time for step: {round((time.time() - step_st)*1000,1)} ms"
+                        self.get_logger().info(message)
                     elif self.button_state == "quit":
-                        print("Quit episode recording")
+                        self.get_logger().info("Quit episode recording")
                         break
                     else:
                         raise ValueError(f"Invalid state {self.button_state}")
@@ -481,14 +483,8 @@ class AgentNode(Node):
                         self.obs = self.env.step(action)
                         for camera_name in self.camera_names:
                             self.obs[f"{camera_name}_rgb"] = self.camera_images.get(camera_name)
-                        message = f"\rTime passed: {round(time_passed, 2)} Step: {t} Time for step: {round((time.time() - step_st)*1000,1)} ms   "
-                        print_color(
-                            message,
-                            color="white",
-                            attrs=("bold",),
-                            end="",
-                            flush=True,
-                        )
+                        message = f"Time passed: {round(time_passed, 2)} Step: {t} Time for step: {round((time.time() - step_st)*1000,1)} ms"
+                        self.get_logger().info(message)
                 else:
                     step_st = time.time()
                     
@@ -507,29 +503,40 @@ class AgentNode(Node):
                     step_time = (time.time() - step_start) * 1000
                     
                     total_time = (time.time() - step_st) * 1000
-                    print(f"Timing: act={act_time:.1f}ms, step={step_time:.1f}ms, total={total_time:.1f}ms")
-                    message = f"\rTime passed: {round(time.time() - start_time, 2)},\tTime for step: {round((time.time() - step_st)*1000,1)} ms   "
-                    print_color(
-                        message,
-                        color="white",
-                        attrs=("bold",),
-                        end="",
-                        flush=True,
-                    )
+                    self.get_logger().info(f"Timing: act={act_time:.1f}ms, step={step_time:.1f}ms, total={total_time:.1f}ms")
+                    message = f"Time passed: {round(time.time() - start_time, 2)}, Time for step: {round((time.time() - step_st)*1000,1)} ms"
+                    self.get_logger().info(message)
         except KeyboardInterrupt:
-            print("ROS node interrupted")
+            self.get_logger().info("ROS node interrupted by Ctrl+C")
+            self.shutdown_requested = True
         except Exception as e:
-            print(f"Unexpected error: {e}")
+            self.get_logger().error(f"Unexpected error: {e}")
+        finally:
+            self.cleanup()
 
 
+def signal_handler(sig, frame):
+    """Handle shutdown signals gracefully"""
+    print("\nShutdown signal received, cleaning up...")
+    
 def main():
+    # Set up signal handlers for graceful shutdown
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
     rclpy.init()
+    agent_node = None
     
     try:
         agent_node = AgentNode()
         agent_node.run()
+    except KeyboardInterrupt:
+        print("\nKeyboard interrupt received")
     finally:
+        if agent_node is not None:
+            agent_node.cleanup()
         rclpy.shutdown()
+        print("Shutdown complete")
 
 
 if __name__ == "__main__":
