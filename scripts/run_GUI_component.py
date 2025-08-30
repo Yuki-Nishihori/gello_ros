@@ -25,7 +25,7 @@ class ROSButtonApp(Node):
         self.shutdown_requested = False
         
         # 2. ROS2パブリッシャーを作成
-        self.pub = self.create_publisher(String, '/button_state', 10)
+        self.pub = self.create_publisher(String, '/GUI_button', 10)
         
         # 3. Initialize GUI in component mode
         if self.component_mode:

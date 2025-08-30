@@ -69,7 +69,7 @@ class AgentNode(Node):
         # Initialize subscribers if needed
         if self.use_save_interface:
             self.start_button_subscriber()
-            self.get_logger().info(f"Save interface enabled, listening to /button_state")
+            self.get_logger().info(f"Save interface enabled, listening to /GUI_button")
         
         # Initialize camera subscribers
         if not self.mock and self.camera_names:
@@ -158,7 +158,7 @@ class AgentNode(Node):
         """Start button state subscriber"""
         self.create_subscription(
             String,
-            "/button_state",
+            "/GUI_button",
             self._button_callback,
             1  # QoS depth
         )
