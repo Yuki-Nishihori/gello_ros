@@ -131,6 +131,7 @@ class AgentNode(Node):
     def _camera_color_callback(self, camera_name, msg: Image):
         """Callback for the color image."""
         try:
+            self.get_logger().debug(f"Received image for {camera_name}")
             self.camera_images[camera_name] = self.bridge.imgmsg_to_cv2(msg, "rgb8")
         except Exception as e:
             self.get_logger().error(f"Failed to convert image for {camera_name}: {e}")
@@ -148,6 +149,7 @@ class AgentNode(Node):
 
     def _button_callback(self, msg: String):
         """Callback for button state"""
+        self.get_logger().info(f"Button state changed to: {msg.data}")
         self.button_state = msg.data
 
     def start_button_subscriber(self):
@@ -547,12 +549,12 @@ class AgentNode(Node):
                             pass
                         elif self.agent_type == "touch":
                             rclpy.spin_once(self.agent, timeout_sec=0.001)
-                            if not self.skip_initial_move:
-                                action = {"ee_pos": self.robot_start_pose_with_touch[:3], "ee_quat": self.robot_start_pose_with_touch[3:]}
-                                self.obs = self.env.step(action)
-                                time.sleep(5)
-                                self.obs = self.env.step(action)
-                            action = self.agent.act(self.obs, force_pose_update=True)
+                            
+                            # action = {"ee_pos": self.robot_start_pose_with_touch[:3], "ee_quat": self.robot_start_pose_with_touch[3:]}
+                            # self.obs = self.env.step(action)
+                            # time.sleep(5)
+                            # self.obs = self.env.step(action)
+                            # action = self.agent.act(self.obs, force_pose_update=True)
                         elif self.agent_type == "act":
                             pass
 
@@ -592,7 +594,7 @@ class AgentNode(Node):
                         # print("ee_euler", self.obs["ee_euler"])
                         self.obs = self.env.step(action)
                         message = f"Waiting for the next episode. Time for step: {round((time.time() - step_st)*1000,1)} ms"
-                        self.get_logger().info(message)
+                        # self.get_logger().info(message)
                     elif self.button_state == "quit":
                         self.get_logger().info("Quit episode recording")
                         break

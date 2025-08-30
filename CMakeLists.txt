@@ -27,7 +27,7 @@ install(PROGRAMS
   scripts/run_agent_node.py
   scripts/run_agent_component.py
   scripts/run_gello.py
-  scripts/run_GUI.py
+  scripts/run_GUI_component.py
   scripts/train.py
   scripts/gello_get_offset.py
   DESTINATION lib/${PROJECT_NAME}

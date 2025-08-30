@@ -120,6 +120,19 @@ def launch_setup(context, *args, **kwargs):
         ]
     )
     
+    # GUI Node (only when save_episode is enabled)
+    gui_node = None
+    if save_episode:
+        gui_node = Node(
+            package='gello_ros',
+            executable='run_GUI_component.py',
+            name='gui_button_publisher',
+            output='screen',
+            parameters=[{
+                'component_mode': True,  # Enable component mode
+            }]
+        )
+    
     # Start with ComponentManager container
     nodes_to_launch = [main_container]
     
@@ -218,6 +231,14 @@ def launch_setup(context, *args, **kwargs):
         actions=[agent_node]
     )
     nodes_to_launch.append(delayed_agent)
+    
+    # STEP 4: Start GUI if save_episode is enabled (after agent)
+    if save_episode and gui_node:
+        delayed_gui = TimerAction(
+            period=agent_start_delay + 1.0,  # Start GUI 1 second after agent
+            actions=[gui_node]
+        )
+        nodes_to_launch.append(delayed_gui)
     
     return nodes_to_launch
 
