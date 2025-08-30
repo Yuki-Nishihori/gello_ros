@@ -103,6 +103,8 @@ class AgentNode(Node):
         self.declare_parameter("number_of_episodes", 1)
         self.declare_parameter("number_of_steps", 10000)
         self.declare_parameter("eval_ckpt_dir", "policy_last.ckpt")
+        self.declare_parameter("save_episode_dir", "./episode_data")
+        self.declare_parameter("task_name", "default")
 
     def get_parameters(self):
         """Get all parameters from ROS2 parameter server"""
@@ -131,7 +133,7 @@ class AgentNode(Node):
     def _camera_color_callback(self, camera_name, msg: Image):
         """Callback for the color image."""
         try:
-            self.get_logger().debug(f"Received image for {camera_name}")
+            # self.get_logger().debug(f"Received image for {camera_name}") # ログが多すぎる場合はコメントアウト
             self.camera_images[camera_name] = self.bridge.imgmsg_to_cv2(msg, "rgb8")
         except Exception as e:
             self.get_logger().error(f"Failed to convert image for {camera_name}: {e}")
@@ -141,11 +143,11 @@ class AgentNode(Node):
         for camera_name in self.camera_names:
             self.create_subscription(
                 Image,
-                f"/{camera_name}_camera/color/image_raw",
+                f"/{camera_name}/color/image_raw",
                 partial(self._camera_color_callback, camera_name),
                 1  # QoS depth
             )
-            self.get_logger().info(f"Subscribed to /{camera_name}_camera/color/image_raw")
+            self.get_logger().info(f"Subscribed to /{camera_name}/color/image_raw")
 
     def _button_callback(self, msg: String):
         """Callback for button state"""
@@ -368,7 +370,7 @@ class AgentNode(Node):
             pose_msg = PoseStamped()
             pose_msg.header = Header()
             pose_msg.header.stamp = self.get_clock().now().to_msg()
-            pose_msg.header.frame_id = "base"  # または適切なベースフレーム
+            pose_msg.header.frame_id = "base"
             
             # Position (x, y, z)
             pose_msg.pose.position.x = self.robot_home_pose_with_touch[0]
@@ -393,12 +395,9 @@ class AgentNode(Node):
         self.get_logger().info("Starting cleanup...")
         try:
             if hasattr(self, 'robot') and self.robot is not None:
-                # Stop any ongoing robot motions
                 self.get_logger().info("Stopping robot...")
-                # Add robot-specific cleanup if needed
                 
             if hasattr(self, 'agent') and self.agent is not None:
-                # Cleanup agent resources
                 self.get_logger().info("Cleaning up agent...")
                 if hasattr(self.agent, 'cleanup'):
                     self.agent.cleanup()
@@ -410,15 +409,18 @@ class AgentNode(Node):
     def start_component_execution(self):
         """Start component-based execution using timer"""
         self.get_logger().info("Starting component execution 🚀🚀🚀")
-        # Create timer for control loop
-        timer_period = 1.0 / self.hz  # Convert Hz to seconds
+        timer_period = 1.0 / self.hz
         self.control_timer = self.create_timer(timer_period, self.control_loop_callback)
         
     def control_loop_callback(self):
         """Timer callback for control loop execution"""
         if self.shutdown_requested:
             return
-            
+        
+        # 修正: rclpy.spin_once() を削除
+        # Component ManagerのExecutorがコールバックを自動的に処理するため、
+        # ここで手動で spin_once を呼ぶと処理が競合し、コールバックが呼ばれなくなる原因になります。
+        
         try:
             if self.use_save_interface:
                 self._handle_save_interface_mode()
@@ -432,9 +434,7 @@ class AgentNode(Node):
     def _handle_save_interface_mode(self):
         """Handle save interface mode execution"""
         if self.button_state == "start":
-            # TouchAgentの場合はspinを実行してコールバックを処理
-            if self.agent_type == "touch":
-                rclpy.spin_once(self, timeout_sec=0.001)
+            # 修正: rclpy.spin_once() を削除
             self.get_logger().info("Moving to the start pose")
             if self.agent_type == "gello":
                 pass
@@ -475,9 +475,7 @@ class AgentNode(Node):
             self.current_episode_number += 1
 
         elif self.button_state == "pass":
-            # TouchAgentの場合はspinを実行してコールバックを処理
-            if self.agent_type == "touch":
-                rclpy.spin_once(self, timeout_sec=0.001)
+            # 修正: rclpy.spin_once() を削除
             step_st = time.time()
             action = self.agent.act(self.obs)
             self.obs = self.env.step(action)
@@ -513,9 +511,7 @@ class AgentNode(Node):
         """Handle default mode execution"""
         step_st = time.time()
         
-        # TouchAgentの場合はspinを実行してコールバックを処理
-        if self.agent_type == "touch":
-            rclpy.spin_once(self, timeout_sec=0.001)
+        # 修正: rclpy.spin_once() を削除
         
         # agent.act() timing
         act_start = time.time()
@@ -533,7 +529,11 @@ class AgentNode(Node):
         self.get_logger().info(message)
         
     def run(self):
-        """Main execution loop for standalone mode"""
+        """
+        Main execution loop for standalone mode.
+        NOTE: This method is NOT called when running as a component.
+        The spin_once calls here are necessary for standalone execution.
+        """
         self.get_logger().info("Start 🚀🚀🚀")
         start_time = time.time()
         current_episode_number = 0
@@ -543,18 +543,14 @@ class AgentNode(Node):
         try:
             while rclpy.ok() and not self.shutdown_requested:
                 if self.use_save_interface:
+                    # For standalone mode, spin_once is needed to process button/camera callbacks
+                    rclpy.spin_once(self, timeout_sec=0.001)
                     if self.button_state == "start":                           
                         self.get_logger().info("Moving to the start pose")
                         if self.agent_type == "gello":
                             pass
                         elif self.agent_type == "touch":
                             rclpy.spin_once(self.agent, timeout_sec=0.001)
-                            
-                            # action = {"ee_pos": self.robot_start_pose_with_touch[:3], "ee_quat": self.robot_start_pose_with_touch[3:]}
-                            # self.obs = self.env.step(action)
-                            # time.sleep(5)
-                            # self.obs = self.env.step(action)
-                            # action = self.agent.act(self.obs, force_pose_update=True)
                         elif self.agent_type == "act":
                             pass
 
@@ -572,7 +568,9 @@ class AgentNode(Node):
                             step_st = time.time()
                             action = self.agent.act(self.obs)
                             self.obs = self.env.step(action)
-                            self.obs[f"{camera_name}_rgb"] = self.camera_images.get(camera_name)
+                            # Update camera images for replay
+                            for camera_name in self.camera_names:
+                                self.obs[f"{camera_name}_rgb"] = self.camera_images.get(camera_name)
                             action_replay.append(action)
                             obs_replay.append(self.obs)
                             message = f"Episode number: {current_episode_number} Time passed: {round(time.time() - st_episode, 2)}, Time for step: {round((time.time() - step_st)*1000,1)} ms"
@@ -586,21 +584,20 @@ class AgentNode(Node):
                         current_episode_number += 1
 
                     elif self.button_state == "pass":
-                        # TouchAgentの場合はspinを実行してコールバックを処理
                         if self.agent_type == "touch":
                             rclpy.spin_once(self.agent, timeout_sec=0.001)
                         step_st = time.time()
                         action = self.agent.act(self.obs)
-                        # print("ee_euler", self.obs["ee_euler"])
                         self.obs = self.env.step(action)
                         message = f"Waiting for the next episode. Time for step: {round((time.time() - step_st)*1000,1)} ms"
-                        # self.get_logger().info(message)
                     elif self.button_state == "quit":
                         self.get_logger().info("Quit episode recording")
                         break
                     else:
                         raise ValueError(f"Invalid state {self.button_state}")
                 elif self.agent_type == "act":
+                    # For standalone mode, spin_once is needed to process camera callbacks
+                    rclpy.spin_once(self, timeout_sec=0.001)
                     # Initialize position and observation
                     action = {"ee_pos": self.robot_start_pose_with_touch[:3], "ee_quat": self.robot_start_pose_with_touch[3:]}
                     self.obs = self.env.step(action)
@@ -610,6 +607,7 @@ class AgentNode(Node):
                         self.obs[f"{camera_name}_rgb"] = self.camera_images.get(camera_name)
                     # Run the agent
                     for t in range(self.number_of_steps):
+                        rclpy.spin_once(self, timeout_sec=0.001)
                         time_passed = time.time() - start_time
                         step_st = time.time()
                         action = self.agent.act(self.obs, t)
@@ -619,18 +617,17 @@ class AgentNode(Node):
                         message = f"Time passed: {round(time_passed, 2)} Step: {t} Time for step: {round((time.time() - step_st)*1000,1)} ms"
                         self.get_logger().info(message)
                 else:
+                    # For standalone mode, spin_once is needed to process callbacks
+                    rclpy.spin_once(self, timeout_sec=0.001)
                     step_st = time.time()
                     
-                    # TouchAgentの場合はspinを実行してコールバックを処理
                     if self.agent_type == "touch":
                         rclpy.spin_once(self.agent, timeout_sec=0.001)
                     
-                    # agent.act() timing
                     act_start = time.time()
                     action = self.agent.act(self.obs)
                     act_time = (time.time() - act_start) * 1000
                     
-                    # env.step() timing
                     step_start = time.time()
                     self.obs = self.env.step(action)
                     step_time = (time.time() - step_start) * 1000
