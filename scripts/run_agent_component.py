@@ -575,7 +575,7 @@ class AgentNode(Node):
                             step_st = time.time()
                             action = self.agent.act(self.obs)
                             self.obs = self.env.step(action)
-                            #     self.obs[f"{camera_name}_rgb"] = self.camera_images.get(camera_name)
+                            self.obs[f"{camera_name}_rgb"] = self.camera_images.get(camera_name)
                             action_replay.append(action)
                             obs_replay.append(self.obs)
                             message = f"Episode number: {current_episode_number} Time passed: {round(time.time() - st_episode, 2)}, Time for step: {round((time.time() - step_st)*1000,1)} ms"
