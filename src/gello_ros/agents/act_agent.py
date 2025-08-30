@@ -4,7 +4,6 @@ import os
 import pickle
 import rclpy
 from rclpy.node import Node
-from einops import rearrange
 import torch
 from gello_ros.agents.agent import Agent
 from scipy.spatial.transform import Rotation as R
@@ -94,7 +93,7 @@ class ACTAgent(Agent, Node):
         # Iterate through the camera names
         for cam_name in self.camera_names:
             # Retrieve and rearrange the image for the current camera
-            curr_image = rearrange(obs[f"{cam_name}_rgb"], "h w c -> c h w")
+            curr_image = obs[f"{cam_name}_rgb"].transpose(2, 0, 1)
             curr_images.append(curr_image)
 
         # Stack images into a single numpy array

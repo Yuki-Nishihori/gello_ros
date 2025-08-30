@@ -2,7 +2,6 @@ import os
 import h5py
 import torch
 import numpy as np
-from einops import rearrange
 from torch.utils.data import DataLoader
 
 from gello_ros.policy.policy import ACTPolicy, CNNMLPPolicy
@@ -245,7 +244,7 @@ def sample_insertion_pose():
 def get_image(images, camera_names, device="cpu"):
     curr_images = []
     for cam_name in camera_names:
-        curr_image = rearrange(images[cam_name], "h w c -> c h w")
+        curr_image = images[cam_name].transpose(2, 0, 1)
         curr_images.append(curr_image)
     curr_image = np.stack(curr_images, axis=0)
     curr_image = torch.from_numpy(curr_image / 255.0).float().to(device).unsqueeze(0)
