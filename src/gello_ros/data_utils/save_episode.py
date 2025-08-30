@@ -18,22 +18,22 @@ def save_episode(node: Node, episode_number: int, obs_replay: List[Dict], action
     """
     # --- パラメータの宣言と取得 ---
     # パラメータを宣言することで、launchファイルなどから値を設定できます。
-    node.declare_parameter("camera_names", ["base"])
-    node.declare_parameter("camera_width", 640)
-    node.declare_parameter("camera_height", 480)
-    node.declare_parameter("wrench_dim", 6)
+    # node.declare_parameter("camera_names", ["base"])
+    # node.declare_parameter("camera_width", 640)
+    # node.declare_parameter("camera_height", 480)
+    # node.declare_parameter("wrench_dim", 6)
     node.declare_parameter("save_episode_dir", "./episode_data")
     node.declare_parameter("task_name", "default")
-    node.declare_parameter("use_FT_sensor", False)
+    # node.declare_parameter("use_FT_sensor", False)
 
     # 宣言したパラメータの値を取得
-    camera_names = node.get_parameter("camera_names").get_parameter_value().string_array_value
-    cam_width = node.get_parameter("camera_width").get_parameter_value().integer_value
-    cam_height = node.get_parameter("camera_height").get_parameter_value().integer_value
-    wrench_dim = node.get_parameter("wrench_dim").get_parameter_value().integer_value
+    # camera_names = node.get_parameter("camera_names").get_parameter_value().string_array_value
+    # cam_width = node.get_parameter("camera_width").get_parameter_value().integer_value
+    # cam_height = node.get_parameter("camera_height").get_parameter_value().integer_value
+    # wrench_dim = node.get_parameter("wrench_dim").get_parameter_value().integer_value
     save_episode_dir = node.get_parameter("save_episode_dir").get_parameter_value().string_value
     task_name = node.get_parameter("task_name").get_parameter_value().string_value
-    use_FT_sensor = node.get_parameter("use_FT_sensor").get_parameter_value().bool_value
+    # use_FT_sensor = node.get_parameter("use_FT_sensor").get_parameter_value().bool_value
     
     # --- データの準備 ---
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -49,13 +49,13 @@ def save_episode(node: Node, episode_number: int, obs_replay: List[Dict], action
         "/observations/ee_euler": [],
     }
 
-    # カメラ画像を辞書に追加
-    for cam_name in camera_names:
-        data_dict[f"/observations/images/{cam_name}_rgb"] = []
+    # # カメラ画像を辞書に追加
+    # for cam_name in camera_names:
+    #     data_dict[f"/observations/images/{cam_name}_rgb"] = []
 
-    # FTセンサーデータを辞書に追加
-    if use_FT_sensor:
-        data_dict["/observations/wrench"] = []
+    # # FTセンサーデータを辞書に追加
+    # if use_FT_sensor:
+    #     data_dict["/observations/wrench"] = []
 
     # リプレイバッファからデータを辞書に格納
     for o, a in zip(obs_replay, action_replay):
@@ -73,12 +73,12 @@ def save_episode(node: Node, episode_number: int, obs_replay: List[Dict], action
         data_dict["/observations/ee_rot_matrix"].append(o["ee_rot_matrix"])
         data_dict["/observations/ee_euler"].append(o["ee_euler"])
         
-        if use_FT_sensor:
-            data_dict["/observations/wrench"].append(o["ee_wrench"])
+        # if use_FT_sensor:
+        #     data_dict["/observations/wrench"].append(o["ee_wrench"])
             
-        for cam_name in camera_names:
-            img_name = f"{cam_name}_rgb"
-            data_dict[f"/observations/images/{img_name}"].append(o[img_name])
+        # for cam_name in camera_names:
+        #     img_name = f"{cam_name}_rgb"
+        #     data_dict[f"/observations/images/{img_name}"].append(o[img_name])
 
     # --- HDF5ファイルへの保存 ---
     data_dir = os.path.join(save_episode_dir, f"{timestamp}_{task_name}")
@@ -86,36 +86,36 @@ def save_episode(node: Node, episode_number: int, obs_replay: List[Dict], action
     dataset_path = os.path.join(data_dir, f"episode_{episode_number}.hdf5")
 
     max_timesteps = len(obs_replay)
-
+    print(data_dict.keys())
     with h5py.File(dataset_path, "w", rdcc_nbytes=1024**2 * 2) as root:
         root.attrs["sim"] = True
         obs = root.create_group("observations")
-        image = obs.create_group("images")
+        # image = obs.create_group("images")
         action = root.create_group("action")
 
         # データセットの作成
-        for cam_name in camera_names:
-            image.create_dataset(
-                f"{cam_name}_rgb", (max_timesteps, cam_height, cam_width, 3), 
-                dtype="uint8", chunks=(1, cam_height, cam_width, 3)
-            )
+        # for cam_name in camera_names:
+        #     image.create_dataset(
+        #         f"{cam_name}_rgb", (max_timesteps, cam_height, cam_width, 3), 
+        #         dtype="uint8", chunks=(1, cam_height, cam_width, 3)
+            # )
         
-        obs.create_dataset("joint_positions", (max_timesteps, 6))
-        obs.create_dataset("joint_velocities", (max_timesteps, 6))
-        obs.create_dataset("joint_torques", (max_timesteps, 6))
+        obs.create_dataset("joint_positions", (max_timesteps, 7))
+        obs.create_dataset("joint_velocities", (max_timesteps, 7))
+        obs.create_dataset("joint_torques", (max_timesteps, 7))
         obs.create_dataset("ee_pos", (max_timesteps, 3))
         obs.create_dataset("ee_quat", (max_timesteps, 4))
         obs.create_dataset("ee_rot_matrix", (max_timesteps, 3, 3))
         obs.create_dataset("ee_euler", (max_timesteps, 3))
         
-        action.create_dataset("joint_positions", (max_timesteps, 6))
+        action.create_dataset("joint_positions", (max_timesteps, 7))
         action.create_dataset("ee_pos", (max_timesteps, 3))
         action.create_dataset("ee_quat", (max_timesteps, 4))
         action.create_dataset("ee_rot_matrix", (max_timesteps, 3, 3))
         action.create_dataset("ee_euler", (max_timesteps, 3))
 
-        if use_FT_sensor:
-            obs.create_dataset("wrench", (max_timesteps, wrench_dim))
+        # if use_FT_sensor:
+        #     obs.create_dataset("wrench", (max_timesteps, wrench_dim))
 
         # データを書き込み
         for name, data in data_dict.items():

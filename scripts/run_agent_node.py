@@ -381,7 +381,7 @@ class AgentNode(Node):
 
     def save_episode_thread(self, episode_number, obs_replay, action_replay):
         """Thread function for saving episodes"""
-        save_episode(episode_number, obs_replay, action_replay)
+        save_episode(self, episode_number, obs_replay, action_replay)
 
     def run(self):
         """Main execution loop"""
