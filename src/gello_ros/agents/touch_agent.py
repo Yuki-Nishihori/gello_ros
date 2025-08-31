@@ -158,10 +158,19 @@ class TouchAgent(Agent, Node):
     def _log_topic_info(self) -> None:
         """Publisherとsubscriberのtopic一覧をログ出力します。"""
         self.get_logger().info("=== TouchAgent Topic Configuration ===")
+        self.get_logger().info("  Parameters:")
         self.get_logger().info(f"  - teleoperation_mode: {self.teleop_mode}")
         self.get_logger().info(f"  - robot_base_frame: {self.robot_base_frame}")
         self.get_logger().info(f"  - touch_base_frame: {self.touch_base_frame}")
         self.get_logger().info(f"  - feedback_wrench_sensor_frame: {self.feedback_wrench_sensor_frame}")
+        self.get_logger().info("  Subscribers:")
+        self.get_logger().info(f"  - Pose: {self.ee_pose_topic} (PoseStamped)")
+        self.get_logger().info(f"  - Button: {self.button_topic} (TouchButtonEvent)")
+        self.get_logger().info("  Publishers:")
+        self.get_logger().info(f"  - Force Feedback: {self.force_feedback_topic} (TouchFeedback)")
+        self.get_logger().info("  - Debug Publishers:")
+        self.get_logger().info(f"  -  - Action Pose (RViz): /touch_debug_action_pose_rviz (PoseStamped)")
+        self.get_logger().info(f"  -  - Force Feedback (RViz): /touch_debug_force_feedback_rviz (WrenchStamped)")
         self.get_logger().info("=======================================")
 
     def _get_robot_urdf(self) -> str:
