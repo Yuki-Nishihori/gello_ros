@@ -28,12 +28,13 @@ class TouchAgent(Agent, Node):
     また、ロボットからの力覚フィードバックをTouchデバイスに送信する機能も持ちます。
     """
 
-    def __init__(self):
+    def __init__(self, robot_description: str = None):
         """ノードを初期化し、パラメータ、通信、TFを設定します。"""
         Node.__init__(self, 'touch_agent')
         Agent.__init__(self)
 
         # メンバ変数の初期化
+        self._robot_description = robot_description
         self._touch_current_pose: np.ndarray | None = None
         self._robot_start_pose_with_touch: np.ndarray | None = None
         self._robot_start_pose: np.ndarray | None = None
@@ -152,6 +153,7 @@ class TouchAgent(Agent, Node):
             self.get_logger().error(f"詳細: {traceback.format_exc()}")
             self.kdl_helper = None
             self.static_transform = None
+            raise RuntimeError(f"Failed to initialize KDL in TouchAgent: {e}")
 
     def _log_topic_info(self) -> None:
         """Publisherとsubscriberのtopic一覧をログ出力します。"""
@@ -164,6 +166,9 @@ class TouchAgent(Agent, Node):
 
     def _get_robot_urdf(self) -> str:
         """ロボットのURDFを取得します。"""
+        if self._robot_description:
+            self.get_logger().info(f"URDF from constructor argument (length: {len(self._robot_description)} chars)")
+            return self._robot_description
         try:
             # robot_descriptionパラメータから直接取得を試行
             self.get_logger().info("robot_descriptionパラメータから取得を試行...")
@@ -256,10 +261,14 @@ class TouchAgent(Agent, Node):
         """Touchデバイスの姿勢を購読し、numpy配列として保存します。"""
         quat = np.array([msg.pose.orientation.x, msg.pose.orientation.y,
                         msg.pose.orientation.z, msg.pose.orientation.w])
+        
+        # 無効なquaternionの場合は、このメッセージを無視（コールバックを早期リターン）
         if np.linalg.norm(quat) < 1e-6:
-            quat = np.array([0.0, 0.0, 0.0, 1.0])
-        else:
-            quat = quat / np.linalg.norm(quat)
+            self.get_logger().warn("Touchデバイスからのquaternionが無効です。このメッセージを無視します。")
+            return
+        
+        # 有効なquaternionを正規化
+        quat = quat / np.linalg.norm(quat)
         self._touch_current_pose = np.array([
             msg.pose.position.x, msg.pose.position.y, msg.pose.position.z,
             quat[0], quat[1], quat[2], quat[3]
@@ -397,6 +406,12 @@ class TouchAgent(Agent, Node):
         """
         current_ee_pose = np.concatenate((obs["ee_pos"], obs["ee_quat"]))
         
+        # 危険な入力データの検証
+        if self._touch_current_pose is None:
+            self.get_logger().warn("Touch device pose not available yet, using current robot pose")
+            # Touchデバイスのポーズが利用できない場合は、テレオペを無効にする
+            self._is_teleop_active = False
+        
         # デバッグ: 入力観測の確認
         self.get_logger().debug(f"TouchAgent act() called:")
         self.get_logger().debug(f"  - current_ee_pose: {np.round(current_ee_pose, 3)}")
@@ -435,7 +450,8 @@ class TouchAgent(Agent, Node):
         
         self._was_teleop_active = self._is_teleop_active
 
-        target_pose = np.zeros(7)
+        # 危険なゼロポーズを避けるため、現在の実際のロボット姿勢で初期化
+        target_pose = current_ee_pose.copy()
         if self._is_teleop_active:
             self.get_logger().debug("  - Teleoperation ACTIVE")
             if self._robot_start_pose_with_touch is not None and self._robot_start_pose is not None:
@@ -457,16 +473,17 @@ class TouchAgent(Agent, Node):
                 target_pose = self._robot_current_pose if self._robot_current_pose is not None else current_ee_pose
         else:
             self.get_logger().debug("  - Teleoperation INACTIVE")
-            # テレオペ非アクティブ時の姿勢維持ロジック
+            # テレオペ非アクティブ時の姿勢維持ロジック - 必ず現在のロボットposeで初期化
             if self._robot_current_pose is None or not self._pose_initialized:
-                self._robot_current_pose = current_ee_pose
-                self._pose_initialized = True
-                self.get_logger().debug("  - Initialized robot_current_pose")
+                if not np.allclose(current_ee_pose[:3], [0, 0, 0], atol=1e-6):
+                    self._robot_current_pose = current_ee_pose.copy()  # 現在のロボットの実際のpose
+                    self._pose_initialized = True
+                    self.get_logger().debug(f"  - Initialized robot_current_pose with current robot pose: {np.round(self._robot_current_pose[:3], 3)}")
             elif force_pose_update:
-                self._robot_current_pose = current_ee_pose
-                self.get_logger().debug("  - Force updated robot_current_pose")
+                self._robot_current_pose = current_ee_pose.copy()
+                self.get_logger().debug(f"  - Force updated robot_current_pose: {np.round(self._robot_current_pose[:3], 3)}")
             
-            target_pose = self._robot_current_pose
+            target_pose = self._robot_current_pose if self._robot_current_pose is not None else current_ee_pose
 
         target_quat = target_pose[3:]
         action_dict = {

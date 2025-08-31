@@ -22,6 +22,7 @@ class CartesianImpedanceControlRobot(Robot, Node):
     def __init__(
         self,
         use_gripper: bool = False,
+        robot_description: str = None,
     ):
         # Initialize ROS2 node
         Node.__init__(self, 'cartesian_impedance_control_robot')
@@ -79,29 +80,30 @@ class CartesianImpedanceControlRobot(Robot, Node):
      
         # Initialize kinematics
         try:
-            urdf_string = None
-            try:
-                self.get_logger().info(f"Attempting to get URDF from parameter: robot_description")
-                urdf_string = self.get_parameter("robot_description").get_parameter_value().string_value
-                if not urdf_string or len(urdf_string) == 0:
-                    self.get_logger().warn("robot_description parameter is empty, trying to get from external parameter server")
-                    try:
-                        import subprocess
-                        result = subprocess.run(['ros2', 'param', 'get', '/robot_state_publisher', 'robot_description'], capture_output=True, text=True, timeout=2.0)
-                        if result.returncode == 0:
-                            raw_output = result.stdout.strip()
-                            xml_start = -1
-                            for tag in ['<?xml', '<robot']:
-                                idx = raw_output.find(tag)
-                                if idx != -1:
-                                    xml_start = idx
-                                    break
-                            if xml_start != -1:
-                                urdf_string = raw_output[xml_start:]
-                    except Exception as ext_e:
-                        self.get_logger().debug(f"Failed to get URDF from external source: {ext_e}")
-            except Exception as e:
-                self.get_logger().error(f"Failed to get robot_description parameter: {e}")
+            urdf_string = robot_description
+            if not urdf_string:
+                try:
+                    self.get_logger().info(f"Attempting to get URDF from parameter: robot_description")
+                    urdf_string = self.get_parameter("robot_description").get_parameter_value().string_value
+                    if not urdf_string or len(urdf_string) == 0:
+                        self.get_logger().warn("robot_description parameter is empty, trying to get from external parameter server")
+                        try:
+                            import subprocess
+                            result = subprocess.run(['ros2', 'param', 'get', '/robot_state_publisher', 'robot_description'], capture_output=True, text=True, timeout=2.0)
+                            if result.returncode == 0:
+                                raw_output = result.stdout.strip()
+                                xml_start = -1
+                                for tag in ['<?xml', '<robot']:
+                                    idx = raw_output.find(tag)
+                                    if idx != -1:
+                                        xml_start = idx
+                                        break
+                                if xml_start != -1:
+                                    urdf_string = raw_output[xml_start:]
+                        except Exception as ext_e:
+                            self.get_logger().debug(f"Failed to get URDF from external source: {ext_e}")
+                except Exception as e:
+                    self.get_logger().error(f"Failed to get robot_description parameter: {e}")
                 
             if urdf_string and len(urdf_string) > 0:
                 self.get_logger().info(f"Initializing KDL with base_link='{self.robot_base_frame}', ee_link='{self.ee_link}'")
@@ -114,6 +116,9 @@ class CartesianImpedanceControlRobot(Robot, Node):
         except Exception as e:
             self.get_logger().error(f"Failed to initialize KDL kinematics: {e}")
             self.kdl_helper = None
+
+        if self.kdl_helper is None:
+            raise RuntimeError("KDL kinematics failed to initialize.")
 
         # Initialize IK solver
         try:

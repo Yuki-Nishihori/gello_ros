@@ -39,13 +39,7 @@ def launch_setup(context, *args, **kwargs):
     franka_robot_description_content = Command([
         PathJoinSubstitution([FindExecutable(name="xacro")]),
         " ",
-        PathJoinSubstitution([FindPackageShare("franka_description"), "robots", "fr3", "fr3.urdf.xacro"]),
-        " ",
-        "hand:=true",
-        " ",
-        "ee_id:=franka_hand",
-        " ",
-        "robot_ip:=192.168.1.1",
+        PathJoinSubstitution([FindPackageShare("onolab_robot_description"), "robots", "fr3", "fr3_with_pestle_and_leptrino.urdf.xacro"]),
     ])
     
     # Touch device robot description (if enabled)
