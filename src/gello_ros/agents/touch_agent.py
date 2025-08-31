@@ -42,6 +42,9 @@ class TouchAgent(Agent, Node):
         self._last_target_pose: np.ndarray | None = None  # 最後に計算された目標姿勢
         self._pose_initialized = False  # 初期姿勢が設定されたかのフラグ
 
+        self.pose_static_transform: np.ndarray | None = None
+        self.wrench_static_transform: np.ndarray | None = None
+
         # テレオペレーションの状態管理フラグ
         self._is_teleop_active = False  # 白ボタンが押されているか
         self._was_teleop_active = False # 前のステップで白ボタンが押されていたか
@@ -72,6 +75,7 @@ class TouchAgent(Agent, Node):
         self.declare_parameter("teleoperation_mode", "bilateral")
         self.declare_parameter("robot_base_frame", "base_link")
         self.declare_parameter("touch_base_frame", "touch_base")
+        self.declare_parameter("touch_force_frame", "touch_force_frame")
         self.declare_parameter("feedback_wrench_sensor_frame", "tool0")
         self.declare_parameter("robot_description", "")
 
@@ -83,6 +87,7 @@ class TouchAgent(Agent, Node):
         self.teleop_mode = self.get_parameter("teleoperation_mode").get_parameter_value().string_value
         self.robot_base_frame = self.get_parameter("robot_base_frame").get_parameter_value().string_value
         self.touch_base_frame = self.get_parameter("touch_base_frame").get_parameter_value().string_value
+        self.touch_force_frame = self.get_parameter("touch_force_frame").get_parameter_value().string_value
         self.feedback_wrench_sensor_frame = self.get_parameter("feedback_wrench_sensor_frame").get_parameter_value().string_value
 
         if self.teleop_mode not in ["unilateral", "bilateral"]:
@@ -125,7 +130,8 @@ class TouchAgent(Agent, Node):
             if not urdf_string:
                 self.get_logger().error("URDFの取得に失敗しました。KDLを無効化します。")
                 self.kdl_helper = None
-                self.static_transform = None
+                self.pose_static_transform = None
+                self.wrench_static_transform = None
                 return
             
             # KDLヘルパーの初期化
@@ -139,20 +145,28 @@ class TouchAgent(Agent, Node):
             )
             self.get_logger().info(f"KDL初期化が完了しました: {self.kdl_helper._num_jnts} joints")
             
-            # 静的TF変換の取得（robot_base_frame <-> touch_base_frame）
+            # 静的TF変換の取得
             self.get_logger().info("静的TF変換を取得中...")
-            self._get_static_transform()
-            if self.static_transform is not None:
-                self.get_logger().info("静的TF変換の取得が完了しました")
+            self.pose_static_transform = self._get_transform(self.touch_base_frame, self.robot_base_frame)
+            self.wrench_static_transform = self._get_transform(self.touch_force_frame, self.robot_base_frame)
+
+            if self.pose_static_transform is not None:
+                self.get_logger().info("姿勢計算用の静的TF変換の取得が完了しました")
             else:
-                self.get_logger().warn("静的TF変換の取得に失敗しました")
+                self.get_logger().warn("姿勢計算用の静的TF変換の取得に失敗しました")
+
+            if self.wrench_static_transform is not None:
+                self.get_logger().info("力覚計算用の静的TF変換の取得が完了しました")
+            else:
+                self.get_logger().warn("力覚計算用の静的TF変換の取得に失敗しました")
                 
         except Exception as e:
             self.get_logger().error(f"KDL初期化に失敗: {e}")
             import traceback
             self.get_logger().error(f"詳細: {traceback.format_exc()}")
             self.kdl_helper = None
-            self.static_transform = None
+            self.pose_static_transform = None
+            self.wrench_static_transform = None
             raise RuntimeError(f"Failed to initialize KDL in TouchAgent: {e}")
 
     def _log_topic_info(self) -> None:
@@ -162,6 +176,7 @@ class TouchAgent(Agent, Node):
         self.get_logger().info(f"  - teleoperation_mode: {self.teleop_mode}")
         self.get_logger().info(f"  - robot_base_frame: {self.robot_base_frame}")
         self.get_logger().info(f"  - touch_base_frame: {self.touch_base_frame}")
+        self.get_logger().info(f"  - touch_force_frame: {self.touch_force_frame}")
         self.get_logger().info(f"  - feedback_wrench_sensor_frame: {self.feedback_wrench_sensor_frame}")
         self.get_logger().info("  Subscribers:")
         self.get_logger().info(f"  - Pose: {self.ee_pose_topic} (PoseStamped)")
@@ -212,33 +227,29 @@ class TouchAgent(Agent, Node):
         self.get_logger().error("すべてのURDF取得方法が失敗しました")
         return ""
 
-    def _get_static_transform(self) -> None:
-        """静的TF変換（robot_base_frame <-> touch_base_frame）を取得・保存します。"""
-        self.get_logger().info(f"静的TF変換を取得中: '{self.robot_base_frame}' <-> '{self.touch_base_frame}'")
+    def _get_transform(self, target_frame: str, source_frame: str) -> np.ndarray | None:
+        """指定されたフレーム間の静的TF変換を取得します。"""
+        self.get_logger().info(f"静的TF変換を取得中: '{source_frame}' -> '{target_frame}'")
         
         start_time = time.time()
         while rclpy.ok():
             if time.time() - start_time > 5.0:
-                self.get_logger().error("静的TF変換の取得がタイムアウトしました。KDL変換を無効化します。")
-                self.static_transform = None
-                return
+                self.get_logger().error(f"静的TF変換の取得がタイムアウトしました: '{source_frame}' -> '{target_frame}'")
+                return None
             
             try:
-                # robot_base_frame -> touch_base_frame の変換を取得
                 transform = self.tf_buffer.lookup_transform(
-                    self.touch_base_frame,  # target
-                    self.robot_base_frame,  # source
+                    target_frame,
+                    source_frame,
                     tf2_ros.Time(),
                     timeout=Duration(seconds=0.1)
                 )
-                
-                # 変換行列として保存
-                self.static_transform = self._transform_to_matrix(transform)
-                self.get_logger().info("静的TF変換を取得しました")
-                return
+                self.get_logger().info(f"静的TF変換を取得しました: '{source_frame}' -> '{target_frame}'")
+                return self._transform_to_matrix(transform)
                 
             except tf2_ros.TransformException:
                 rclpy.spin_once(self, timeout_sec=0.05)
+        return None
 
     def _transform_to_matrix(self, transform: tf2_ros.TransformStamped) -> np.ndarray:
         """TransformStampedを4x4変換行列に変換します。"""
@@ -294,13 +305,13 @@ class TouchAgent(Agent, Node):
         """
         KDLを使ってレンチ（力とトルク）をリアルタイムに変換し、フィードバックメッセージを作成します。
         
-        変換チェーン: tool0 -> base_link (KDL) -> touch_base (static TF)
+        変換チェーン: tool0 -> base_link (KDL) -> touch_force_frame (static TF)
         """
         # KDLまたは静的変換が利用できない場合はフォールバック
-        if self.kdl_helper is None or self.static_transform is None:
-            self.get_logger().warn("KDL変換が利用できません。ゼロレンチを返します。")
+        if self.kdl_helper is None or self.wrench_static_transform is None:
+            self.get_logger().warn("KDLまたはレンチ用のTF変換が利用できません。ゼロレンチを返します。")
             self.get_logger().debug(f"  - kdl_helper: {self.kdl_helper is not None}")
-            self.get_logger().debug(f"  - static_transform: {self.static_transform is not None}")
+            self.get_logger().debug(f"  - wrench_static_transform: {self.wrench_static_transform is not None}")
             return self._create_zero_wrench_messages()
         
         try:
@@ -326,12 +337,12 @@ class TouchAgent(Agent, Node):
             force_in_base = R_tool_to_base @ force_in_tool  
             torque_in_base = R_tool_to_base @ torque_in_tool
             
-            # 4. base_linkからtouch_baseへの静的変換を適用
-            R_base_to_touch = self.static_transform[:3, :3]
-            t_base_to_touch = self.static_transform[:3, 3]
+            # 4. base_linkからtouch_force_frameへの静的変換を適用
+            R_base_to_touch = self.wrench_static_transform[:3, :3]
+            t_base_to_touch = self.wrench_static_transform[:3, 3]
             
-            force_in_touch_base = R_base_to_touch @ force_in_base
-            torque_in_touch_base = R_base_to_touch @ torque_in_base + np.cross(t_base_to_touch, force_in_touch_base)
+            force_in_touch_frame = R_base_to_touch @ force_in_base
+            torque_in_touch_frame = R_base_to_touch @ torque_in_base + np.cross(t_base_to_touch, force_in_touch_frame)
 
             # 5. RViz可視化用メッセージ (robot_base_frame座標系) を作成
             wrench_vis_msg = WrenchStamped()
@@ -344,11 +355,11 @@ class TouchAgent(Agent, Node):
             wrench_vis_msg.wrench.torque.y = float(torque_in_base[1])
             wrench_vis_msg.wrench.torque.z = float(torque_in_base[2])
 
-            # 6. Touchデバイスへのフィードバック用メッセージ (touch_base_frame座標系) を作成
+            # 6. Touchデバイスへのフィードバック用メッセージ (touch_force_frame座標系) を作成
             feedback_msg = TouchFeedback()
-            feedback_msg.force.x = float(force_in_touch_base[0])
-            feedback_msg.force.y = float(force_in_touch_base[1])
-            feedback_msg.force.z = float(force_in_touch_base[2])
+            feedback_msg.force.x = float(force_in_touch_frame[0])
+            feedback_msg.force.y = float(force_in_touch_frame[1])
+            feedback_msg.force.z = float(force_in_touch_frame[2])
 
             return wrench_vis_msg, feedback_msg
             
@@ -380,10 +391,10 @@ class TouchAgent(Agent, Node):
         touch_relative_rot = touch_current_rot * touch_start_rot.inv()
         
         # 静的変換行列が利用可能な場合は座標変換を行う
-        if self.static_transform is not None:
+        if self.pose_static_transform is not None:
             # touch_base_frame -> robot_base_frameの変換行列を取得
             # static_transformは robot_base_frame -> touch_base_frame なので逆変換を使用
-            robot_to_touch_transform = self.static_transform
+            robot_to_touch_transform = self.pose_static_transform
             touch_to_robot_transform = np.linalg.inv(robot_to_touch_transform)
             
             # 位置の変換（回転のみ適用、並進は加算しない）

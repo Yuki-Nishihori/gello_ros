@@ -5,6 +5,7 @@
     touch_button_topic: "/touch/button"
     touch_force_feedback_topic: "/touch/force_feedback"
     touch_base_frame: "touch_base"
+    touch_force_frame: "touch_force"  
     teleoperation_mode: "bilateral" # "unilateral" or "bilateral"
     use_gripper: False
     use_FT_sensor: True
