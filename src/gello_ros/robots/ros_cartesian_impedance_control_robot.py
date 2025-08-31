@@ -44,7 +44,7 @@ class CartesianImpedanceControlRobot(Robot, Node):
         self.cartesian_command_publisher = self.create_publisher(
             PoseStamped,
             self.cartesian_impedance_controller_command_topic,
-            10
+            1
         )
 
         # Initialize subscribers
