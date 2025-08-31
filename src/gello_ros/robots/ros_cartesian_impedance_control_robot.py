@@ -54,6 +54,12 @@ class CartesianImpedanceControlRobot(Robot, Node):
             self.joint_states_callback,
             1
         )
+        self.wrench_subscription = self.create_subscription(
+            WrenchStamped,
+            self.feedback_wrench_topic,
+            self.wrench_callback,
+            1
+        )
         
         # Initialize variables
         self.ros_joint_state = None
@@ -75,6 +81,35 @@ class CartesianImpedanceControlRobot(Robot, Node):
                 self.get_logger().error(f"Timeout waiting for joint_states_topic: {self.joint_states_topic}. システムを終了します。")
                 exit(1)
             rclpy.spin_once(self, timeout_sec=0.1)
+
+        # Wait for wrench feedback
+        self.get_logger().info(f"Waiting for wrench feedback on topic: {self.feedback_wrench_topic}")
+        start_time = time.time()
+        while self._wrench is None and rclpy.ok():
+            if time.time() - start_time > 5:
+                self.get_logger().error(f"Timeout waiting for feedback_wrench_topic: {self.feedback_wrench_topic}. Exiting.")
+                raise TimeoutError("Wrench feedback timeout")
+            rclpy.spin_once(self, timeout_sec=0.1)
+
+        # Initialize service client for FT sensor zero reset
+        self.feedback_wrench_zero_client = self.create_client(
+            Empty, 
+            self.feedback_wrench_zero_service
+        )
+        
+        # Wait for service
+        self.get_logger().info("Waiting for feedback wrench zero service...")
+        if not self.feedback_wrench_zero_client.wait_for_service(timeout_sec=5.0):
+            self.get_logger().error("Feedback wrench zero service not available")
+            raise TimeoutError("Service timeout")
+        
+        # Call zero reset service
+        self.get_logger().info("Zero reset feedback FT sensor offset")
+        future = self.feedback_wrench_zero_client.call_async(Empty.Request())
+        rclpy.spin_until_future_complete(self, future)
+        if future.result() is None:
+            self.get_logger().error("Failed to call feedback wrench zero service")
+        time.sleep(1)
 
         
      
@@ -146,6 +181,8 @@ class CartesianImpedanceControlRobot(Robot, Node):
         self.declare_parameter("joint_pos_limits_lower", [0.0])
         self.declare_parameter("cartesian_impedance_controller_command_topic", "/cartesian_impedance_controller/target_frame")
         self.declare_parameter("joint_states_topic", "/joint_states")
+        self.declare_parameter("feedback_wrench_topic", "/ft_sensor/wrench")
+        self.declare_parameter("feedback_wrench_zero_service", "/ft_sensor/zero")
         self.declare_parameter("robot_base_frame", "base_link")
         self.declare_parameter("ee_link", "tool0")
         self.declare_parameter("robot_description_name", "/robot_description")
@@ -159,6 +196,8 @@ class CartesianImpedanceControlRobot(Robot, Node):
         self.joint_pos_limits_lower = self.get_parameter("joint_pos_limits_lower").get_parameter_value().double_array_value
         self.cartesian_impedance_controller_command_topic = self.get_parameter("cartesian_impedance_controller_command_topic").get_parameter_value().string_value
         self.joint_states_topic = self.get_parameter("joint_states_topic").get_parameter_value().string_value
+        self.feedback_wrench_topic = self.get_parameter("feedback_wrench_topic").get_parameter_value().string_value
+        self.feedback_wrench_zero_service = self.get_parameter("feedback_wrench_zero_service").get_parameter_value().string_value
         self.robot_base_frame = self.get_parameter("robot_base_frame").get_parameter_value().string_value
         self.ee_link = self.get_parameter("ee_link").get_parameter_value().string_value
         self.robot_description_name = self.get_parameter("robot_description_name").get_parameter_value().string_value
@@ -170,7 +209,9 @@ class CartesianImpedanceControlRobot(Robot, Node):
         self.get_logger().info(f"  - {self.cartesian_impedance_controller_command_topic}: PoseStamped")
         self.get_logger().info("Subscribers:")
         self.get_logger().info(f"  - {self.joint_states_topic}: JointState")
+        self.get_logger().info(f"  - {self.feedback_wrench_topic}: WrenchStamped")
         self.get_logger().info("Service Clients:")
+        self.get_logger().info(f"  - {self.feedback_wrench_zero_service}: Empty")
         self.get_logger().info("Key Parameters:")
         self.get_logger().info(f"  - robot_base_frame: {self.robot_base_frame}")
         self.get_logger().info(f"  - ee_link: {self.ee_link}")
@@ -202,6 +243,7 @@ class CartesianImpedanceControlRobot(Robot, Node):
         self._last_valid_joint_efforts = self._joint_efforts.copy()
 
     def wrench_callback(self, msg: WrenchStamped):
+        """Wrench feedback callback"""
         self._wrench = msg
 
     def num_dofs(self) -> int:
