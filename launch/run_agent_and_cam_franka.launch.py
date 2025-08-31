@@ -304,7 +304,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'save_episode',
-            default_value='false',
+            default_value='true',
             description='Whether to save episodes'
         ),
         DeclareLaunchArgument(
