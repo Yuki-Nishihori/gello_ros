@@ -352,11 +352,21 @@ class AgentNode(Node):
         # For standalone mode, spin_once is needed to process callbacks
         rclpy.spin_once(self, timeout_sec=0.001)
         rclpy.spin_once(self.robot, timeout_sec=0.001)
-        rclpy.spin_once(self.agent, timeout_sec=0.001)
+        if isinstance(self.agent, Node):
+            rclpy.spin_once(self.agent, timeout_sec=0.001)
         
         self.obs = self.env.get_obs()
         self._add_images_to_obs()
 
+    def _get_obs(self, repetitions=100):
+        """Continuously spins to get the latest observation from the environment, waiting for data to be updated."""
+        for _ in range(repetitions):
+            rclpy.spin_once(self, timeout_sec=0.001)
+            rclpy.spin_once(self.robot, timeout_sec=0.001)
+            if isinstance(self.agent, Node):
+                rclpy.spin_once(self.agent, timeout_sec=0.001)
+            self.obs = self.env.get_obs()
+        
     def _add_images_to_obs(self):
         """Populates self.obs with the latest camera images."""
         if self.obs is None:
@@ -382,7 +392,7 @@ class AgentNode(Node):
             time.sleep(5)
 
         # Initialize obs for the main loop
-        self._update_obs_with_images()
+        self._get_obs()
         self.agent.act(self.obs)
 
     def save_episode_thread(self, episode_number, obs_replay, action_replay):
@@ -426,7 +436,7 @@ class AgentNode(Node):
                         action = {"ee_pos": self.robot_home_pose_with_touch[:3], "ee_quat": self.robot_home_pose_with_touch[3:]}
                         self.env.step(action)
                         time.sleep(5)
-                        self._update_obs_with_images()
+                        self._get_obs()
                         self.agent.act(self.obs)
 
                         obs_replay = []
@@ -458,9 +468,7 @@ class AgentNode(Node):
                         self.get_logger().info("Episode done, saving now")
                         current_save_thread = threading.Thread(target=self.save_episode_thread, args=(current_episode_number, obs_replay, action_replay))
                         current_save_thread.start()
-                        # Initialize obs for the next episode
-                        self._update_obs_with_images()
-                        self.agent.act(self.obs)
+
 
                         self.button_state = "pass"
                         current_episode_number += 1
@@ -479,7 +487,7 @@ class AgentNode(Node):
                         raise ValueError(f"Invalid state {self.button_state}")
                 elif self.agent_type == "act":
                     # For standalone mode, spin_once is needed to process camera callbacks
-                    self._update_obs_with_images()
+                    self._get_obs()
                     # Run the agent
                     for t in range(self.number_of_steps):
                         rclpy.spin_once(self, timeout_sec=0.001)
