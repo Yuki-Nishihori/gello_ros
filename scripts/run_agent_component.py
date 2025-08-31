@@ -54,13 +54,6 @@ class AgentNode(Node):
         self.current_save_thread = None
         self.obs = None
         
-        # Create publisher for home pose debug
-        self.home_pose_publisher = self.create_publisher(
-            PoseStamped,
-            '/debug/home_pose',
-            10
-        )
-        
         # Declare parameters with default values
         self._declare_parameters()
         
@@ -79,12 +72,6 @@ class AgentNode(Node):
         self.initialize_robot()
         self.initialize_agent()
         
-        # Publish home pose for debug
-        self.publish_home_pose_debug()
-        
-        # Start component execution if in component mode
-        if self.component_mode:
-            self.start_component_execution()
 
     def _declare_parameters(self):
         """Declare all ROS2 parameters with default values"""
@@ -313,29 +300,11 @@ class AgentNode(Node):
                             f"Joint [{j}], leader: {action[j]}, follower: {joints[j]}, diff: {action[j] - joints[j]}"
                         )
                     return
-                # Initialize camera images
-                for camera_name in self.camera_names:
-                    obs[f"{camera_name}_rgb"] = self.camera_images.get(camera_name)
-                
-                self.obs = obs
+                self._update_obs_with_images()
 
             elif self.agent_type == "touch":
-                assert self.control_mode in "cartesian"
-                self.env = RobotEnv(self.robot, control_rate_hz=self.hz, camera_dict=self.camera_clients, control_mode=self.control_mode)
-                self.get_logger().info("Using 3D Systems Touch agent")
-                # Initialize the touch agent
-                self.agent = TouchAgent(robot_description=self.robot_description)
-                # Move the robot towards the robot_home_pose_with_touch until it's close enough
-                if not self.skip_initial_move:
-                    self.get_logger().info("Moving to the home pose")
-                    action = {"ee_pos": self.robot_home_pose_with_touch[:3], "ee_quat": self.robot_home_pose_with_touch[3:]}
-                    self.env.step(action)
-                    time.sleep(5)
-                # Initialize obs
-                obs = self.env.get_obs()
-                for camera_name in self.camera_names:
-                    obs[f"{camera_name}_rgb"] = self.camera_images.get(camera_name)
-                self.obs = obs
+                self._initialize_touch_agent_sequence()
+
                 
             elif self.agent_type == "dummy" or self.agent_type == "none":
                 self.env = RobotEnv(self.robot, control_rate_hz=self.hz, camera_dict=self.camera_clients, control_mode="joint")
@@ -367,10 +336,7 @@ class AgentNode(Node):
                 )
 
                 # Initialize obs
-                obs = self.env.get_obs()
-                for camera_name in self.camera_names:
-                    obs[f"{camera_name}_rgb"] = self.camera_images.get(camera_name)
-                self.obs = obs
+                self._update_obs_with_images()
                 
             elif self.agent_type == "policy":
                 raise NotImplementedError("add your imitation policy here if there is one")
@@ -380,27 +346,44 @@ class AgentNode(Node):
             self.get_logger().fatal(f"Failed to initialize agent, shutting down. Error: {e}")
             sys.exit(1)
     
-    def publish_home_pose_debug(self):
-        """Publish robot_home_pose_with_touch as PoseStamped for RViz visualization"""
-        if len(self.robot_home_pose_with_touch) >= 7:
-            pose_msg = PoseStamped()
-            pose_msg.header = Header()
-            pose_msg.header.stamp = self.get_clock().now().to_msg()
-            pose_msg.header.frame_id = "base"
-            
-            # Position (x, y, z)
-            pose_msg.pose.position.x = self.robot_home_pose_with_touch[0]
-            pose_msg.pose.position.y = self.robot_home_pose_with_touch[1]
-            pose_msg.pose.position.z = self.robot_home_pose_with_touch[2]
-            
-            # Orientation (quaternion: x, y, z, w)
-            pose_msg.pose.orientation.x = self.robot_home_pose_with_touch[3]
-            pose_msg.pose.orientation.y = self.robot_home_pose_with_touch[4]
-            pose_msg.pose.orientation.z = self.robot_home_pose_with_touch[5]
-            pose_msg.pose.orientation.w = self.robot_home_pose_with_touch[6]
-            
-            self.home_pose_publisher.publish(pose_msg)
-            self.get_logger().info(f"Published home pose: pos({pose_msg.pose.position.x:.3f}, {pose_msg.pose.position.y:.3f}, {pose_msg.pose.position.z:.3f})")
+
+    def _update_obs_with_images(self):
+        """Gets the latest observation from the environment and populates it with camera images."""
+        # For standalone mode, spin_once is needed to process callbacks
+        rclpy.spin_once(self, timeout_sec=0.001)
+        rclpy.spin_once(self.robot, timeout_sec=0.001)
+        rclpy.spin_once(self.agent, timeout_sec=0.001)
+        
+        self.obs = self.env.get_obs()
+        self._add_images_to_obs()
+
+    def _add_images_to_obs(self):
+        """Populates self.obs with the latest camera images."""
+        if self.obs is None:
+            return
+        for camera_name in self.camera_names:
+            self.obs[f"{camera_name}_rgb"] = self.camera_images.get(camera_name)
+
+    def _initialize_touch_agent_sequence(self):
+        """Initializes the TouchAgent and its pose, handling the initial move logic."""
+        assert self.control_mode in "cartesian"
+        self.env = RobotEnv(self.robot, control_rate_hz=self.hz, camera_dict=self.camera_clients, control_mode=self.control_mode)
+        self.get_logger().info("Using 3D Systems Touch agent")
+
+        self.agent = TouchAgent(
+            robot_description=self.robot_description,
+        )
+
+        # Move the robot to the configured home pose if not skipping
+        if not self.skip_initial_move:
+            self.get_logger().info("Moving to the home pose...")
+            action = {"ee_pos": self.robot_home_pose_with_touch[:3], "ee_quat": self.robot_home_pose_with_touch[3:]}
+            self.env.step(action)
+            time.sleep(5)
+
+        # Initialize obs for the main loop
+        self._update_obs_with_images()
+        self.agent.act(self.obs)
 
     def save_episode_thread(self, episode_number, obs_replay, action_replay):
         """Thread function for saving episodes"""
@@ -422,127 +405,6 @@ class AgentNode(Node):
         except Exception as e:
             self.get_logger().error(f"Error during cleanup: {e}")
 
-    def start_component_execution(self):
-        """Start component-based execution using timer"""
-        self.get_logger().info("Starting component execution 🚀🚀🚀")
-        timer_period = 1.0 / self.hz
-        self.control_timer = self.create_timer(timer_period, self.control_loop_callback)
-        
-    def control_loop_callback(self):
-        """Timer callback for control loop execution"""
-        if self.shutdown_requested:
-            return
-        
-        # 修正: rclpy.spin_once() を削除
-        # Component ManagerのExecutorがコールバックを自動的に処理するため、
-        # ここで手動で spin_once を呼ぶと処理が競合し、コールバックが呼ばれなくなる原因になります。
-        
-        try:
-            if self.use_save_interface:
-                self._handle_save_interface_mode()
-            elif self.agent_type == "act":
-                self._handle_act_mode()
-            else:
-                self._handle_default_mode()
-        except Exception as e:
-            self.get_logger().error(f"Error in control loop: {e}")
-            
-    def _handle_save_interface_mode(self):
-        """Handle save interface mode execution"""
-        if self.button_state == "start":
-            # 修正: rclpy.spin_once() を削除
-            self.get_logger().info("Moving to the start pose")
-            if self.agent_type == "gello":
-                pass
-            elif self.agent_type == "touch":
-                if not self.skip_initial_move:
-                    action = {"ee_pos": self.robot_start_pose_with_touch[:3], "ee_quat": self.robot_start_pose_with_touch[3:]}
-                    self.obs = self.env.step(action)
-                    time.sleep(5)
-                    self.obs = self.env.step(action)
-                action = self.agent.act(self.obs, force_pose_update=True)
-            elif self.agent_type == "act":
-                pass
-
-            obs_replay = []
-            action_replay = []
-            if self.current_save_thread is not None and self.current_save_thread.is_alive():
-                self.get_logger().warn("Can't start new episode, current episode is still saving")
-                self.button_state = "pass"
-                return
-            if (self.current_episode_number + 1) > self.number_of_episodes:
-                self.get_logger().info("All episodes done")
-                return
-            st_episode = time.time()
-            for i in range(self.number_of_steps):
-                step_st = time.time()
-                action = self.agent.act(self.obs)
-                self.obs = self.env.step(action)
-                action_replay.append(action)
-                obs_replay.append(self.obs)
-                message = f"Episode number: {self.current_episode_number} Time passed: {round(time.time() - st_episode, 2)}, Time for step: {round((time.time() - step_st)*1000,1)} ms"
-                self.get_logger().info(message)
-
-            self.get_logger().info("Episode done, saving now")
-            self.current_save_thread = threading.Thread(target=self.save_episode_thread, args=(self.current_episode_number, obs_replay, action_replay))
-            self.current_save_thread.start()
-
-            self.button_state = "pass"
-            self.current_episode_number += 1
-
-        elif self.button_state == "pass":
-            # 修正: rclpy.spin_once() を削除
-            step_st = time.time()
-            action = self.agent.act(self.obs)
-            self.obs = self.env.step(action)
-            message = f"Waiting for the next episode. Time for step: {round((time.time() - step_st)*1000,1)} ms"
-            self.get_logger().info(message)
-        elif self.button_state == "quit":
-            self.get_logger().info("Quit episode recording")
-            self.shutdown_requested = True
-        else:
-            raise ValueError(f"Invalid state {self.button_state}")
-            
-    def _handle_act_mode(self):
-        """Handle ACT mode execution"""
-        # Initialize position and observation
-        action = {"ee_pos": self.robot_start_pose_with_touch[:3], "ee_quat": self.robot_start_pose_with_touch[3:]}
-        self.obs = self.env.step(action)
-        time.sleep(5)
-        self.obs = self.env.step(action)
-        for camera_name in self.camera_names:
-            self.obs[f"{camera_name}_rgb"] = self.camera_images.get(camera_name)
-        
-        for t in range(self.number_of_steps):
-            time_passed = time.time() - self.start_time
-            step_st = time.time()
-            action = self.agent.act(self.obs, t)
-            self.obs = self.env.step(action)
-            for camera_name in self.camera_names:
-                self.obs[f"{camera_name}_rgb"] = self.camera_images.get(camera_name)
-            message = f"Time passed: {round(time_passed, 2)} Step: {t} Time for step: {round((time.time() - step_st)*1000,1)} ms"
-            self.get_logger().info(message)
-            
-    def _handle_default_mode(self):
-        """Handle default mode execution"""
-        step_st = time.time()
-        
-        # 修正: rclpy.spin_once() を削除
-        
-        # agent.act() timing
-        act_start = time.time()
-        action = self.agent.act(self.obs)
-        act_time = (time.time() - act_start) * 1000
-        
-        # env.step() timing
-        step_start = time.time()
-        self.obs = self.env.step(action)
-        step_time = (time.time() - step_start) * 1000
-        
-        total_time = (time.time() - step_st) * 1000
-        self.get_logger().info(f"Timing: act={act_time:.1f}ms, step={step_time:.1f}ms, total={total_time:.1f}ms")
-        message = f"Time passed: {round(time.time() - self.start_time, 2)}, Time for step: {round((time.time() - step_st)*1000,1)} ms"
-        self.get_logger().info(message)
         
     def run(self):
         """
@@ -559,16 +421,13 @@ class AgentNode(Node):
         try:
             while rclpy.ok() and not self.shutdown_requested:
                 if self.use_save_interface:
-                    # For standalone mode, spin_once is needed to process button/camera callbacks
-                    rclpy.spin_once(self, timeout_sec=0.001)
-                    if self.button_state == "start":                           
-                        self.get_logger().info("Moving to the start pose")
-                        if self.agent_type == "gello":
-                            pass
-                        elif self.agent_type == "touch":
-                            rclpy.spin_once(self.agent, timeout_sec=0.001)
-                        elif self.agent_type == "act":
-                            pass
+                    if self.button_state == "start":                                   
+                        self.get_logger().info("Moving to the home pose...")
+                        action = {"ee_pos": self.robot_home_pose_with_touch[:3], "ee_quat": self.robot_home_pose_with_touch[3:]}
+                        self.env.step(action)
+                        time.sleep(5)
+                        self._update_obs_with_images()
+                        self.agent.act(self.obs)
 
                         obs_replay = []
                         action_replay = []
@@ -581,12 +440,6 @@ class AgentNode(Node):
                             break
                         st_episode = time.time()
                         for i in range(self.number_of_steps):
-                            # Process callbacks to get latest sensor data and button states
-                            rclpy.spin_once(self, timeout_sec=0.001)
-                            if hasattr(self, 'robot'):
-                                rclpy.spin_once(self.robot, timeout_sec=0.001)
-                            if self.agent_type == "touch":
-                                rclpy.spin_once(self.agent, timeout_sec=0.001)
 
                             # Check if user wants to quit mid-episode
                             if self.button_state == "quit":
@@ -596,9 +449,7 @@ class AgentNode(Node):
                             step_st = time.time()
                             action = self.agent.act(self.obs)
                             self.obs = self.env.step(action)
-                            # Update camera images for replay
-                            for camera_name in self.camera_names:
-                                self.obs[f"{camera_name}_rgb"] = self.camera_images.get(camera_name)
+                            self._add_images_to_obs()
                             action_replay.append(action)
                             obs_replay.append(self.obs)
                             message = f"Episode number: {current_episode_number} Time passed: {round(time.time() - st_episode, 2)}, Time for step: {round((time.time() - step_st)*1000,1)} ms"
@@ -607,18 +458,20 @@ class AgentNode(Node):
                         self.get_logger().info("Episode done, saving now")
                         current_save_thread = threading.Thread(target=self.save_episode_thread, args=(current_episode_number, obs_replay, action_replay))
                         current_save_thread.start()
+                        # Initialize obs for the next episode
+                        self._update_obs_with_images()
+                        self.agent.act(self.obs)
 
                         self.button_state = "pass"
                         current_episode_number += 1
 
                     elif self.button_state == "pass":
-                        if self.agent_type == "touch":
-                            rclpy.spin_once(self.agent, timeout_sec=0.001)
                         step_st = time.time()
                         action = self.agent.act(self.obs)
                         self.obs = self.env.step(action)
                         message = f"Waiting for the next episode. Time for step: {round((time.time() - step_st)*1000,1)} ms"
                         self.get_logger().info(message)
+                        self._update_obs_with_images()                        
                     elif self.button_state == "quit":
                         self.get_logger().info("Quit episode recording")
                         break
@@ -626,16 +479,7 @@ class AgentNode(Node):
                         raise ValueError(f"Invalid state {self.button_state}")
                 elif self.agent_type == "act":
                     # For standalone mode, spin_once is needed to process camera callbacks
-                    rclpy.spin_once(self, timeout_sec=0.001)
-                    if hasattr(self, 'robot'):
-                        rclpy.spin_once(self.robot, timeout_sec=0.001)
-                    # Initialize position and observation
-                    # action = {"ee_pos": self.robot_start_pose_with_touch[:3], "ee_quat": self.robot_start_pose_with_touch[3:]}
-                    # self.obs = self.env.step(action)
-                    # time.sleep(5)
-                    # self.obs = self.env.step(action)
-                    for camera_name in self.camera_names:
-                        self.obs[f"{camera_name}_rgb"] = self.camera_images.get(camera_name)
+                    self._update_obs_with_images()
                     # Run the agent
                     for t in range(self.number_of_steps):
                         rclpy.spin_once(self, timeout_sec=0.001)
@@ -643,20 +487,13 @@ class AgentNode(Node):
                         step_st = time.time()
                         action = self.agent.act(self.obs, t)
                         self.obs = self.env.step(action)
-                        for camera_name in self.camera_names:
-                            self.obs[f"{camera_name}_rgb"] = self.camera_images.get(camera_name)
+                        self._add_images_to_obs()
                         message = f"Time passed: {round(time_passed, 2)} Step: {t} Time for step: {round((time.time() - step_st)*1000,1)} ms"
                         self.get_logger().info(message)
                 else:
                     # For standalone mode, spin_once is needed to process callbacks
-                    rclpy.spin_once(self, timeout_sec=0.001)
-                    # robot nodeのコールバックを処理するためにspin_onceを追加
-                    if hasattr(self, 'robot'):
-                        rclpy.spin_once(self.robot, timeout_sec=0.001)
+                    self._update_obs_with_images()
                     step_st = time.time()
-                    
-                    if self.agent_type == "touch":
-                        rclpy.spin_once(self.agent, timeout_sec=0.001)
                     
                     act_start = time.time()
                     action = self.agent.act(self.obs)
