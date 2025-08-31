@@ -45,13 +45,18 @@
     # --- 以下のパラメータはご自身の環境に合わせて確認・修正してください ---
     move_group_name: "fr3_manipulator" # MoveItのプランニンググループ名 (例: panda_manipulator)
     robot_base_frame: "base"        # ロボットのベースフレーム名 (例: fr3_link0)
-    ee_link: "fr3_link8"            # エンドエフェクタのフレーム名 (例: fr3_hand_tcp)
-    feedback_wrench_sensor_frame: "fr3_link8"
-    # トピック名
+    ee_link: "pestle_tip"            # エンドエフェクタのフレーム名 (例: fr3_hand_tcp)
+    feedback_wrench_sensor_frame: "ft_sensor_frame" # 力覚センサのフレーム名 (例: force_torque_sensor)
+    # command topic
     joint_trajectory_controller_command_topic: "/fr3_arm_controller/joint_trajectory"
     cartesian_motion_controller_command_topic: "/cartesian_motion_controller/target_frame"
     cartesian_compliance_controller_command_topic: "/cartesian_compliance_controller/target_frame"
     cartesian_impedance_controller_command_topic: "/reference_pose"
+    # sensor topic  
+    compliance_control_wrench_zero_service: "/ft_sensor_wrench_filtered/zero_ftsensor"
+    feedback_wrench_topic: "/ft_sensor_wrench"
+    feedback_wrench_zero_service: "/ft_sensor_wrench_filtered/zero_ftsensor"
+    # robot description
     joint_states_topic: "/joint_states"
     robot_description_name: "/robot_description"
 
