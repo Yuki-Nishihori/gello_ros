@@ -660,9 +660,7 @@ class AgentNode(Node):
                     step_time = (time.time() - step_start) * 1000
                     
                     total_time = (time.time() - step_st) * 1000
-                    self.get_logger().info(f"Timing: act={act_time:.1f}ms, step={step_time:.1f}ms, total={total_time:.1f}ms")
-                    message = f"Time passed: {round(time.time() - start_time, 2)}, Time for step: {round((time.time() - step_st)*1000,1)} ms"
-                    self.get_logger().info(message)
+                    # self.get_logger().info(f"Timing: act={act_time:.1f}ms, step={step_time:.1f}ms, total={total_time:.1f}ms")
         except KeyboardInterrupt:
             self.get_logger().info("ROS node interrupted by Ctrl+C")
             self.shutdown_requested = True
