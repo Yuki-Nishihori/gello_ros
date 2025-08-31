@@ -583,6 +583,8 @@ class AgentNode(Node):
                         for i in range(self.number_of_steps):
                             # Process callbacks to get latest sensor data and button states
                             rclpy.spin_once(self, timeout_sec=0.001)
+                            if hasattr(self, 'robot'):
+                                rclpy.spin_once(self.robot, timeout_sec=0.001)
                             if self.agent_type == "touch":
                                 rclpy.spin_once(self.agent, timeout_sec=0.001)
 
@@ -625,6 +627,8 @@ class AgentNode(Node):
                 elif self.agent_type == "act":
                     # For standalone mode, spin_once is needed to process camera callbacks
                     rclpy.spin_once(self, timeout_sec=0.001)
+                    if hasattr(self, 'robot'):
+                        rclpy.spin_once(self.robot, timeout_sec=0.001)
                     # Initialize position and observation
                     # action = {"ee_pos": self.robot_start_pose_with_touch[:3], "ee_quat": self.robot_start_pose_with_touch[3:]}
                     # self.obs = self.env.step(action)
@@ -646,6 +650,9 @@ class AgentNode(Node):
                 else:
                     # For standalone mode, spin_once is needed to process callbacks
                     rclpy.spin_once(self, timeout_sec=0.001)
+                    # robot nodeのコールバックを処理するためにspin_onceを追加
+                    if hasattr(self, 'robot'):
+                        rclpy.spin_once(self.robot, timeout_sec=0.001)
                     step_st = time.time()
                     
                     if self.agent_type == "touch":
