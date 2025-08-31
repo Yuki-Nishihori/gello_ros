@@ -604,6 +604,7 @@ class AgentNode(Node):
                         action = self.agent.act(self.obs)
                         self.obs = self.env.step(action)
                         message = f"Waiting for the next episode. Time for step: {round((time.time() - step_st)*1000,1)} ms"
+                        self.get_logger().info(message)
                     elif self.button_state == "quit":
                         self.get_logger().info("Quit episode recording")
                         break
@@ -613,10 +614,10 @@ class AgentNode(Node):
                     # For standalone mode, spin_once is needed to process camera callbacks
                     rclpy.spin_once(self, timeout_sec=0.001)
                     # Initialize position and observation
-                    action = {"ee_pos": self.robot_start_pose_with_touch[:3], "ee_quat": self.robot_start_pose_with_touch[3:]}
-                    self.obs = self.env.step(action)
-                    time.sleep(5)
-                    self.obs = self.env.step(action)
+                    # action = {"ee_pos": self.robot_start_pose_with_touch[:3], "ee_quat": self.robot_start_pose_with_touch[3:]}
+                    # self.obs = self.env.step(action)
+                    # time.sleep(5)
+                    # self.obs = self.env.step(action)
                     for camera_name in self.camera_names:
                         self.obs[f"{camera_name}_rgb"] = self.camera_images.get(camera_name)
                     # Run the agent

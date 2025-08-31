@@ -4,7 +4,7 @@ import torch
 import numpy as np
 from torch.utils.data import DataLoader
 
-from gello_ros.policy.policy import ACTPolicy, CNNMLPPolicy
+from gello_ros.policy.policy import ACTPolicy, CompACTPolicy, CNNMLPPolicy
 
 import IPython
 
@@ -12,12 +12,13 @@ e = IPython.embed
 
 
 class EpisodicDataset(torch.utils.data.Dataset):
-    def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats):
+    def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats, include_ft):
         super(EpisodicDataset, self).__init__()
         self.episode_ids = episode_ids
         self.dataset_dir = dataset_dir
         self.camera_names = camera_names
         self.norm_stats = norm_stats
+        self.include_ft = include_ft
         self.is_sim = None
 
     def __len__(self):
@@ -47,15 +48,19 @@ class EpisodicDataset(torch.utils.data.Dataset):
             for cam_name in self.camera_names:
                 image_dict[cam_name] = root[f"/observations/images/{cam_name}"][start_ts]
 
+            # If including force-torque data, append it to the observation
+            if self.include_ft:
+                ft = root["/observations/wrench"][start_ts]
+                
             # Build action by concatenating /action/ee_pos and flattened /observations/ee_rot_matrix over timesteps
             if is_sim:
                 act_ee_pos = root["/action/ee_pos"][start_ts:]
-                act_rot = root["/observations/ee_rot_matrix"][start_ts:]
+                act_rot = root["/action/ee_rot_matrix"][start_ts:]
                 action_len = episode_len - start_ts
             else:
                 idx = max(0, start_ts - 1)
                 act_ee_pos = root["/action/ee_pos"][idx:]
-                act_rot = root["/observations/ee_rot_matrix"][idx:]
+                act_rot = root["/action/ee_rot_matrix"][idx:]
                 action_len = episode_len - idx
 
         self.is_sim = is_sim
@@ -81,12 +86,19 @@ class EpisodicDataset(torch.utils.data.Dataset):
         action_data = (padded_action - self.norm_stats["action_mean"]) / self.norm_stats["action_std"]
         action_data = torch.from_numpy(action_data).float()
         is_pad = torch.from_numpy(is_pad).bool()
+        
+        if self.include_ft:
+            ft_data = torch.from_numpy(ft).float()
+            ft_data = (ft_data - self.norm_stats["ft_mean"]) / self.norm_stats["ft_std"]
+        else:
+            ft_data = []
+
 
         # Return tuple: image data, observation, action, and padding mask
-        return image_data, torch.from_numpy(observation).float(), action_data, is_pad
+        return image_data, torch.from_numpy(observation).float(), ft_data, action_data, is_pad
 
 
-def get_norm_stats(dataset_dir, num_episodes):
+def get_norm_stats(dataset_dir, num_episodes, include_ft):
     """
     各エピソードのHDF5ファイルから、観測とアクションのデータを読み込み、
     各々の平均と標準偏差を計算する。
@@ -94,6 +106,7 @@ def get_norm_stats(dataset_dir, num_episodes):
     アクションは、/action/ee_pos と /observations/ee_rot_matrix（flattenして連結）として算出する。
     """
     all_obs_data = []
+    all_ft_data = []
     all_action_data = []
     
     for episode_idx in range(num_episodes):
@@ -108,11 +121,17 @@ def get_norm_stats(dataset_dir, num_episodes):
             # 読み込み: アクション側
             act_ee_pos = root["/action/ee_pos"][()]                # shape: (T, 3)
             # 注意：アクションの回転については、観測側の回転行列をそのまま利用する（指示に合わせる）
-            act_rot = root["/observations/ee_rot_matrix"][()]      
+            act_rot = root["/action/ee_rot_matrix"][()]      
             act_data = np.concatenate((act_ee_pos, act_rot.reshape(act_rot.shape[0], -1)), axis=1)
+            
+            # 読み込み: 力覚センサーデータ（存在する場合のみ）
+            if include_ft:
+                ft = root["/observations/wrench"][()]                   # shape: (T, 6)
         
         all_obs_data.append(torch.from_numpy(obs_data))
         all_action_data.append(torch.from_numpy(act_data))
+        if include_ft:
+            all_ft_data.append(torch.from_numpy(ft))
     
     # エピソード間で全てのタイムステップを連結
     all_obs_data = torch.cat(all_obs_data, dim=0)
@@ -136,11 +155,19 @@ def get_norm_stats(dataset_dir, num_episodes):
         "example_obs": obs_data,  # 最終エピソードのサンプル（任意）
     }
     
+    if include_ft:
+        all_ft_data = torch.cat(all_ft_data, dim=0)
+        ft_mean = all_ft_data.mean(dim=0, keepdim=True)
+        ft_std = all_ft_data.std(dim=0, keepdim=True)
+        ft_std = torch.clip(ft_std, 1e-2, float("inf"))
+        stats["ft_mean"] = ft_mean.numpy().squeeze()
+        stats["ft_std"] = ft_std.numpy().squeeze()
+    
     return stats
 
 
 def load_data(
-    dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val
+    dataset_dir, num_episodes, camera_names, include_ft, batch_size_train, batch_size_val
 ):
     print(f"\nData from: {dataset_dir}\n")
     # obtain train test split
@@ -150,13 +177,13 @@ def load_data(
     val_indices = shuffled_indices[int(train_ratio * num_episodes) :]
 
     # obtain normalization stats for qpos and action
-    norm_stats = get_norm_stats(dataset_dir, num_episodes)
+    norm_stats = get_norm_stats(dataset_dir, num_episodes, include_ft)
 
     # construct dataset and dataloader
     train_dataset = EpisodicDataset(
-        train_indices, dataset_dir, camera_names, norm_stats
+        train_indices, dataset_dir, camera_names, norm_stats, include_ft
     )
-    val_dataset = EpisodicDataset(val_indices, dataset_dir, camera_names, norm_stats)
+    val_dataset = EpisodicDataset(val_indices, dataset_dir, camera_names, norm_stats, include_ft)
     train_dataloader = DataLoader(
         train_dataset,
         batch_size=batch_size_train,
@@ -180,6 +207,8 @@ def load_data(
 def make_policy(policy_class, policy_config):
     if policy_class == "ACT":
         policy = ACTPolicy(policy_config)
+    elif policy_class == "CompACT":
+        policy = CompACTPolicy(policy_config)
     elif policy_class == "CNNMLP":
         policy = CNNMLPPolicy(policy_config)
     else:
@@ -189,6 +218,8 @@ def make_policy(policy_class, policy_config):
 
 def make_optimizer(policy_class, policy):
     if policy_class == "ACT":
+        optimizer = policy.configure_optimizers()
+    elif policy_class == "CompACT":
         optimizer = policy.configure_optimizers()
     elif policy_class == "CNNMLP":
         optimizer = policy.configure_optimizers()

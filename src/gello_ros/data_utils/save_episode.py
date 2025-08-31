@@ -6,6 +6,8 @@ import rclpy
 from rclpy.node import Node
 from typing import List, Dict, Any
 
+timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
 def save_episode(node: Node, episode_number: int, obs_replay: List[Dict], action_replay: List[Dict]):
     """
     観測データと行動データをHDF5ファイルに保存します。
@@ -27,7 +29,6 @@ def save_episode(node: Node, episode_number: int, obs_replay: List[Dict], action
     use_FT_sensor = node.get_parameter("use_FT_sensor").get_parameter_value().bool_value
     
     # --- データの準備 ---
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     node.get_logger().info(f"エピソード {episode_number} を {save_episode_dir} に保存します。")
 
     # データを格納するための辞書を初期化
@@ -73,7 +74,9 @@ def save_episode(node: Node, episode_number: int, obs_replay: List[Dict], action
 
     # --- HDF5ファイルへの保存 ---
     data_dir = os.path.join(save_episode_dir, f"{timestamp}_{task_name}")
-    os.makedirs(data_dir, exist_ok=True)
+    
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
     dataset_path = os.path.join(data_dir, f"episode_{episode_number}.hdf5")
 
     max_timesteps = len(obs_replay)

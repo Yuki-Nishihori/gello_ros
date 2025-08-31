@@ -24,9 +24,9 @@
     # imitation learning config
     task_name: "grinding_test"
     save_episode_dir: "/home/ros/onolab_ros2/ros2_ws/src/gello_ros/scripts/episode_data"
-    eval_ckpt_dir: "/home/ros/onolab_ros2/ros2_ws/src/gello_ros/scripts/checkpoints/20250311_095946_grinding_test"
+    eval_ckpt_dir: "/home/ros/onolab_ros2/ros2_ws/src/gello_ros/scripts/checkpoints/20250830_214437_grinding_test"
     number_of_episodes: 10 # trials
-    number_of_steps: 20000 # steps for each episode
+    number_of_steps: 1000 # steps for each episode
     control_mode: "cartesian" # "joint" or "cartesian"
     pose_representation: "euler" # "euler" or "rotation_matrix"
     state_dim: 12

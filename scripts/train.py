@@ -20,21 +20,22 @@ task_cfg = TASK_CONFIG
 train_cfg = TRAIN_CONFIG
 policy_config = POLICY_CONFIG
 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-checkpoint_dir = os.path.join(train_cfg["checkpoint_dir"], timestamp + "_" + task_cfg["tsak_name"])
+checkpoint_dir = os.path.join(train_cfg["checkpoint_dir"], timestamp + "_" + task_cfg["task_name"])
 
 # device
 device = os.environ["DEVICE"]
 
 
 def forward_pass(data, policy):
-    image_data, qpos_data, action_data, is_pad = data
-    image_data, qpos_data, action_data, is_pad = (
+    image_data, qpos_data, ft_data, action_data, is_pad = data
+    image_data, qpos_data, ft_data, action_data, is_pad = (
         image_data.to(device),
         qpos_data.to(device),
+        ft_data.to(device) if ft_data != [] else None,
         action_data.to(device),
         is_pad.to(device),
     )
-    return policy(qpos_data, image_data, action_data, is_pad)  # TODO remove None
+    return policy(qpos_data, image_data, ft_data if ft_data != [] else None,  action_data, is_pad)  # TODO remove None
 
 
 def plot_history(train_history, validation_history, num_epochs, ckpt_dir, seed):
@@ -155,6 +156,7 @@ if __name__ == "__main__":
         data_dir,
         num_episodes,
         task_cfg["camera_names"],
+        policy_config["include_ft"],
         train_cfg["batch_size_train"],
         train_cfg["batch_size_val"],
     )
