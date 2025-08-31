@@ -34,6 +34,49 @@ def launch_setup(context, *args, **kwargs):
     enable_touch_system = LaunchConfiguration('enable_touch_system').perform(context) == 'true'
     num_threads = int(LaunchConfiguration('num_threads').perform(context))
     
+    # Leptrino FT sensor component
+    leptrino_component = ComposableNode(
+        package='leptrino_force_torque',
+        plugin='LeptrinoNode',
+        name='leptrino_force_torque_node',
+        namespace='leptrino',
+        parameters=[{
+            'com_port': '/dev/ttyACM0',
+            'frame_id': 'leptrino_frame',
+            'rate': 1200.0
+        }],
+        extra_arguments=[{'use_intra_process_comms': True}],
+    )
+
+    # Leptrino wrench filter component
+    leptrino_filter_component = ComposableNode(
+        package='grinding_force_torque',
+        plugin='grinding_force_torque::WrenchFilter',
+        name='leptrino_wrench_filter',
+        namespace='leptrino',
+        parameters=[{
+            'input_topic': '/leptrino/wrench',
+            'output_topic': '/leptrino/wrench/filtered',
+            'sampling_frequency': 1200.0,
+            'cutoff_frequency': 2.5,
+            'filter_order': 3,
+            'data_window': 100,
+            'initial_zero': True,
+            'disable_filtering': False
+        }],
+        extra_arguments=[{'use_intra_process_comms': True}],
+    )
+    
+    leptrino_container = ComposableNodeContainer(
+        name='leptrino_container',
+        namespace='',
+        package='rclcpp_components',
+        executable='component_container_mt',
+        composable_node_descriptions=[leptrino_component, leptrino_filter_component],
+        parameters=[{'use_intra_process_comms': True}],
+        output='screen',
+    )
+    
     # Robot descriptions
     # Franka FR3 robot description
     franka_robot_description_content = Command([
@@ -128,7 +171,7 @@ def launch_setup(context, *args, **kwargs):
         )
     
     # Start with ComponentManager container
-    nodes_to_launch = [main_container]
+    nodes_to_launch = [main_container, leptrino_container]
     
     # Touch system nodes (if enabled) - STEP 1
     if enable_touch_system:
