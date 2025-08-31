@@ -53,9 +53,8 @@
     cartesian_compliance_controller_command_topic: "/cartesian_compliance_controller/target_frame"
     cartesian_impedance_controller_command_topic: "/reference_pose"
     # sensor topic  
-    compliance_control_wrench_zero_service: "/ft_sensor_wrench_filtered/zero_ftsensor"
-    feedback_wrench_topic: "/ft_sensor_wrench"
-    feedback_wrench_zero_service: "/ft_sensor_wrench_filtered/zero_ftsensor"
+    feedback_wrench_topic: "/leptrino/wrench/filtered"
+    feedback_wrench_zero_service: "/leptrino/wrench/filtered/zero_ftsensor"
     # robot description
     joint_states_topic: "/joint_states"
     robot_description_name: "/robot_description"
