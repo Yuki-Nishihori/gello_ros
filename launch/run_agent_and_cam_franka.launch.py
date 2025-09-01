@@ -170,8 +170,8 @@ def launch_setup(context, *args, **kwargs):
             }]
         )
     
-    # Start with ComponentManager containers
-    nodes_to_launch = [leptrino_container]
+    # Launch order: 1. touch, 2. camera, 3. leptrino, 4. agent node
+    nodes_to_launch = []
     
     # Touch system nodes (if enabled) - STEP 1
     if enable_touch_system:
@@ -227,56 +227,69 @@ def launch_setup(context, *args, **kwargs):
             arguments=['1', '0.5', '0', '-1.5708', '0', '0', 'base', 'touch_base']
         )
         
-        # STEP 1: Start TF publisher immediately (for touch coordinate system)
+        # STEP 1: Start touch system first
         nodes_to_launch.append(touch_base_tf_publisher)
         
-        # STEP 2: Start touch robot state publisher early (for URDF)
-        delayed_touch_rsp = TimerAction(
-            period=0.5,
-            actions=[touch_robot_state_publisher]
-        )
-        nodes_to_launch.append(delayed_touch_rsp)
-        
-        # STEP 3: Start touch component container with sufficient initialization time
         delayed_touch_container = TimerAction(
-            period=1.0,  # More time for URDF loading
+            period=1.0,
             actions=[touch_container]
         )
         nodes_to_launch.append(delayed_touch_container)
         
-        # STEP 4: Start camera after touch system is stable
+        delayed_touch_rsp = TimerAction(
+            period=2.0,
+            actions=[touch_robot_state_publisher]
+        )
+        nodes_to_launch.append(delayed_touch_rsp)
+                
+        # STEP 2: Start camera after touch system
         delayed_camera_container = TimerAction(
-            period=2.5,  # Wait for touch device initialization
+            period=3.0,
             actions=[camera_container]
         )
         nodes_to_launch.append(delayed_camera_container)
         
-        # STEP 5: Start agent after both touch and camera are stable
+        # STEP 3: Start leptrino after camera
+        delayed_leptrino_container = TimerAction(
+            period=5.0,
+            actions=[leptrino_container]
+        )
+        nodes_to_launch.append(delayed_leptrino_container)
+        
+        # STEP 4: Start agent node last
         delayed_agent = TimerAction(
-            period=4.0,  # Ensure both touch and camera are ready
+            period=7.0,
             actions=[agent_node]
         )
         nodes_to_launch.append(delayed_agent)
         
     else:
-        # No touch system - start camera container earlier
+        # No touch system - start in order: camera, leptrino, agent
+        # STEP 1: Start camera first
         delayed_camera_container = TimerAction(
             period=0.5,
             actions=[camera_container]
         )
         nodes_to_launch.append(delayed_camera_container)
         
-        # Start agent after camera
-        delayed_agent = TimerAction(
+        # STEP 2: Start leptrino after camera
+        delayed_leptrino_container = TimerAction(
             period=1.5,
+            actions=[leptrino_container]
+        )
+        nodes_to_launch.append(delayed_leptrino_container)
+        
+        # STEP 3: Start agent last
+        delayed_agent = TimerAction(
+            period=2.5,
             actions=[agent_node]
         )
         nodes_to_launch.append(delayed_agent)
-        agent_start_delay = 1.5
+        agent_start_delay = 2.5
     
     # FINAL STEP: Start GUI if save_episode is enabled (after agent)
     if save_episode and gui_node:
-        gui_start_delay = 5.0 if enable_touch_system else 2.5
+        gui_start_delay = 9.0 if enable_touch_system else 5.0
         delayed_gui = TimerAction(
             period=gui_start_delay,  # Start GUI after agent is fully initialized
             actions=[gui_node]
