@@ -45,7 +45,7 @@ def launch_setup(context, *args, **kwargs):
             'frame_id': 'leptrino_frame',
             'rate': 1200.0
         }],
-        extra_arguments=[{'use_intra_process_comms': True}],
+        # extra_arguments=[{'use_intra_process_comms': True}],
     )
 
     # Leptrino wrench filter component
@@ -64,7 +64,7 @@ def launch_setup(context, *args, **kwargs):
             'initial_zero': True,
             'disable_filtering': False
         }],
-        extra_arguments=[{'use_intra_process_comms': True}],
+        # extra_arguments=[{'use_intra_process_comms': True}],
     )
     
     leptrino_container = ComposableNodeContainer(
@@ -117,7 +117,7 @@ def launch_setup(context, *args, **kwargs):
         remappings=[
             ('image_raw', 'color/image_raw'),
         ],
-        extra_arguments=[{'use_intra_process_comms': True}],
+        # extra_arguments=[{'use_intra_process_comms': True}],
     )
     
     # Agent Node (Python standalone - optimized with shared memory communication)
@@ -191,7 +191,7 @@ def launch_setup(context, *args, **kwargs):
                     'units': 'mm'
                 }
             ],
-            extra_arguments=[{'use_intra_process_comms': True}],
+            # extra_arguments=[{'use_intra_process_comms': True}],
         )
         
         # Touch component container
