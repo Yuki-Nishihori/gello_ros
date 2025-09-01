@@ -300,7 +300,7 @@ class AgentNode(Node):
                             f"Joint [{j}], leader: {action[j]}, follower: {joints[j]}, diff: {action[j] - joints[j]}"
                         )
                     return
-                self._update_obs_with_images()
+                self._update_full_obs()
 
             elif self.agent_type == "touch":
                 self._initialize_touch_agent_sequence()
@@ -336,7 +336,7 @@ class AgentNode(Node):
                 )
 
                 # Initialize obs
-                self._update_obs_with_images()
+                self._update_full_obs()
                 
             elif self.agent_type == "policy":
                 raise NotImplementedError("add your imitation policy here if there is one")
@@ -347,7 +347,7 @@ class AgentNode(Node):
             sys.exit(1)
     
 
-    def _update_obs_with_images(self):
+    def _update_full_obs(self):
         """Gets the latest observation from the environment and populates it with camera images."""
         # For standalone mode, spin_once is needed to process callbacks
         rclpy.spin_once(self, timeout_sec=0.001)
@@ -366,6 +366,7 @@ class AgentNode(Node):
             if isinstance(self.agent, Node):
                 rclpy.spin_once(self.agent, timeout_sec=0.001)
             self.obs = self.env.get_obs()
+        self.get_logger().info(f"Obs ee_pos: {self.obs['ee_pos']}")
         
     def _add_images_to_obs(self):
         """Populates self.obs with the latest camera images."""
@@ -478,8 +479,8 @@ class AgentNode(Node):
                         action = self.agent.act(self.obs)
                         self.obs = self.env.step(action)
                         message = f"Waiting for the next episode. Time for step: {round((time.time() - step_st)*1000,1)} ms"
-                        self.get_logger().info(message)
-                        self._update_obs_with_images()                        
+                        # self.get_logger().info(message)
+                        self._update_full_obs()                        
                     elif self.button_state == "quit":
                         self.get_logger().info("Quit episode recording")
                         break
@@ -500,7 +501,6 @@ class AgentNode(Node):
                         self.get_logger().info(message)
                 else:
                     # For standalone mode, spin_once is needed to process callbacks
-                    self._update_obs_with_images()
                     step_st = time.time()
                     
                     act_start = time.time()
