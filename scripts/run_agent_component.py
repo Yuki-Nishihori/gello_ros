@@ -470,12 +470,21 @@ class AgentNode(Node):
                         current_episode_number += 1
 
                     elif self.button_state == "pass":
+                        
                         step_st = time.time()
+                    
+                        act_start = time.time()
                         action = self.agent.act(self.obs)
+                        act_time = (time.time() - act_start) * 1000
+                        
+                        step_start = time.time()
                         self.obs = self.env.step(action)
+                        step_time = (time.time() - step_start) * 1000
+                        
+                        total_time = (time.time() - step_st) * 1000
+                        self.get_logger().info(f"Timing: act={act_time:.1f}ms, step={step_time:.1f}ms, total={total_time:.1f}ms")
                         rclpy.spin_once(self, timeout_sec=0.0001) # Update button state
-                        message = f"Waiting for the next episode. Time for step: {round((time.time() - step_st)*1000,1)} ms"
-                        self.get_logger().info(message)
+        
                     elif self.button_state == "quit":
                         self.get_logger().info("Quit episode recording")
                         break
