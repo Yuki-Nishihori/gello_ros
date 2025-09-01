@@ -192,6 +192,7 @@ class AgentNode(Node):
                 self.env = RobotEnv(
                     self.robot, 
                     control_rate_hz=self.hz, 
+                    camera_names=list(self.camera_names),
                     control_mode=self.control_mode
                 )
                 self.get_logger().info("Using Gello agent")

@@ -116,7 +116,6 @@ def launch_setup(context, *args, **kwargs):
         }],
         remappings=[
             ('image_raw', 'color/image_raw'),
-            ('image_raw/shm', 'color/image_raw/shm')
         ],
         extra_arguments=[{'use_intra_process_comms': True}],
     )
