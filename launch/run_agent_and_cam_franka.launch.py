@@ -210,30 +210,33 @@ def launch_setup(context, *args, **kwargs):
             arguments=['1', '0.5', '0', '-1.5708', '0', '0', 'base', 'touch_base']
         )
         
-        # STEP 1: Start touch system immediately
-        nodes_to_launch.extend([
-            touch_base_tf_publisher,  # Start TF publisher immediately
-            TimerAction(
-                period=0.5,
-                actions=[
-                    GroupAction([
-                        touch_state_node,
-                        touch_robot_state_publisher,
-                    ])
-                ]
-            )
-        ])
+        # STEP 1: Start TF publisher immediately (for touch coordinate system)
+        nodes_to_launch.append(touch_base_tf_publisher)
         
-        # STEP 2: Start camera container after touch system is ready
+        # STEP 2: Start touch robot state publisher early (for URDF)
+        delayed_touch_rsp = TimerAction(
+            period=0.5,
+            actions=[touch_robot_state_publisher]
+        )
+        nodes_to_launch.append(delayed_touch_rsp)
+        
+        # STEP 3: Start touch_state with sufficient initialization time
+        delayed_touch_state = TimerAction(
+            period=1.0,  # More time for URDF loading
+            actions=[touch_state_node]
+        )
+        nodes_to_launch.append(delayed_touch_state)
+        
+        # STEP 4: Start camera after touch system is stable
         delayed_camera_container = TimerAction(
-            period=1.5,  # After touch system is fully initialized
+            period=2.5,  # Wait for touch device initialization
             actions=[camera_container]
         )
         nodes_to_launch.append(delayed_camera_container)
         
-        # STEP 3: Start agent after camera is ready
+        # STEP 5: Start agent after both touch and camera are stable
         delayed_agent = TimerAction(
-            period=2.5,  # After camera is ready
+            period=4.0,  # Ensure both touch and camera are ready
             actions=[agent_node]
         )
         nodes_to_launch.append(delayed_agent)
@@ -254,11 +257,11 @@ def launch_setup(context, *args, **kwargs):
         nodes_to_launch.append(delayed_agent)
         agent_start_delay = 1.5
     
-    # STEP 4: Start GUI if save_episode is enabled (after agent)
+    # FINAL STEP: Start GUI if save_episode is enabled (after agent)
     if save_episode and gui_node:
-        gui_start_delay = 3.0 if enable_touch_system else 2.0
+        gui_start_delay = 5.0 if enable_touch_system else 2.5
         delayed_gui = TimerAction(
-            period=gui_start_delay,  # Start GUI after agent
+            period=gui_start_delay,  # Start GUI after agent is fully initialized
             actions=[gui_node]
         )
         nodes_to_launch.append(delayed_gui)
