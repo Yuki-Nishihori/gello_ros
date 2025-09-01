@@ -87,19 +87,36 @@ class RobotEnv(Node):
         # Camera handling - Zero-copy mode
         self.camera_names = camera_names
         self.camera_images = {}  # Store Image messages directly for zero-copy
+        self.latest_valid_images = {}  # Store latest valid numpy arrays as fallback
         if self.camera_names:
             self.start_camera_subscribers()
 
     def start_camera_subscribers(self):
         """Start camera subscribers for all camera names"""
         for camera_name in self.camera_names:
+            # Try to subscribe to shared memory topic first, fallback to regular topic
+            topic_name = f"/{camera_name}/color/image_raw"
             self.create_subscription(
                 Image,
-                f"/{camera_name}/color/image_raw",
+                topic_name,
                 partial(self._camera_color_callback, camera_name),
                 qos_profile_sensor_data,
             )
-            self.get_logger().info(f"Subscribed to /{camera_name}/color/image_raw in RobotEnv")
+            self.get_logger().info(f"Subscribed to {topic_name} in RobotEnv")
+        
+        # Wait briefly for initial camera connection
+        self.get_logger().info("カメラ接続を待機中...")
+        import time
+        time.sleep(1.0)  # Give cameras time to connect
+        
+        # Try to receive initial camera data
+        for _ in range(50):  # Try for up to 5 seconds
+            rclpy.spin_once(self, timeout_sec=0.1)
+            if len(self.camera_images) == len(self.camera_names):
+                self.get_logger().info("全てのカメラが接続されました")
+                break
+        else:
+            self.get_logger().warn(f"カメラ接続タイムアウト。接続済み: {len(self.camera_images)}/{len(self.camera_names)}")
 
     def _camera_color_callback(self, camera_name, msg: Image):
         """Callback for the color image - Zero-copy mode: store Image message directly."""
@@ -147,9 +164,19 @@ class RobotEnv(Node):
         for name in self.camera_names:
             image_msg = self.camera_images.get(name)
             if image_msg is not None:
-                observations[f"{name}_rgb"] = image_msg_to_numpy(image_msg)
+                # 新しい画像が利用可能な場合、numpy配列に変換して保存
+                img_array = image_msg_to_numpy(image_msg)
+                observations[f"{name}_rgb"] = img_array
+                self.latest_valid_images[name] = img_array  # 最新の有効な画像として保存
+                self.get_logger().debug(f"カメラ画像を観測に追加: {name}")
             else:
-                observations[f"{name}_rgb"] = None
+                # 画像が利用できない場合、最新の有効な画像を使用
+                if name in self.latest_valid_images:
+                    observations[f"{name}_rgb"] = self.latest_valid_images[name]
+                    self.get_logger().debug(f"以前のカメラ画像を使用: {name}")
+                else:
+                    observations[f"{name}_rgb"] = None
+                    self.get_logger().warn(f"カメラ画像が利用できません（履歴もありません）: {name}")
 
         robot_obs = self._robot.get_observations()
         # It's safer to merge dictionaries
