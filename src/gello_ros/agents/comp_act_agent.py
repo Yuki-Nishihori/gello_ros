@@ -137,7 +137,7 @@ class CompACTAgent(Agent, Node):
             )
             
             # process force-torque readings if used
-            force_torque = obs["ee_wrench"]
+            force_torque = torch.from_numpy(obs["ee_wrench"]).float().to(self.device).unsqueeze(0)
 
             # Call the policy to get actions at specific time steps
             if t % self.query_frequency == 0:

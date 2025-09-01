@@ -86,7 +86,7 @@ class CompACTPolicy(nn.Module):
             return loss_dict
         else:  # inference time
             a_hat, _, (_, _) = self.model(
-                qpos, image, env_state
+                qpos, image, ft, env_state
             )  # no action, sample from prior
             return a_hat
 
