@@ -65,9 +65,6 @@ class AgentNode(Node):
             self.start_button_subscriber()
             self.get_logger().info(f"Save interface enabled, listening to /GUI_button")
         
-        # Initialize camera subscribers
-        if not self.mock and self.camera_names:
-            self.start_camera_subscribers()
         # Initialize robot and agent
         self.initialize_robot()
         self.initialize_agent()
@@ -123,24 +120,6 @@ class AgentNode(Node):
         # Mock is hardcoded to False for now
         self.mock = False
 
-    def _camera_color_callback(self, camera_name, msg: Image):
-        """Callback for the color image."""
-        try:
-            # self.get_logger().debug(f"Received image for {camera_name}") # ログが多すぎる場合はコメントアウト
-            self.camera_images[camera_name] = self.bridge.imgmsg_to_cv2(msg, "rgb8")
-        except Exception as e:
-            self.get_logger().error(f"Failed to convert image for {camera_name}: {e}")
-
-    def start_camera_subscribers(self):
-        """Start camera subscribers for all camera names"""
-        for camera_name in self.camera_names:
-            self.create_subscription(
-                Image,
-                f"/{camera_name}/color/image_raw",
-                partial(self._camera_color_callback, camera_name),
-                qos_profile_sensor_data,
-            )
-            self.get_logger().info(f"Subscribed to /{camera_name}/color/image_raw")
 
     def _button_callback(self, msg: String):
         """Callback for button state"""
