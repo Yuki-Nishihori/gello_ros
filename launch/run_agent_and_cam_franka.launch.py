@@ -31,7 +31,6 @@ def launch_setup(context, *args, **kwargs):
     camera_name = LaunchConfiguration('camera_name').perform(context)
     
     # Get launch arguments - System parameters
-    enable_touch_system = LaunchConfiguration('enable_touch_system').perform(context) == 'true'
     num_threads = int(LaunchConfiguration('num_threads').perform(context))
     
     # Leptrino FT sensor component
@@ -87,7 +86,7 @@ def launch_setup(context, *args, **kwargs):
     
     # Touch device robot description (if enabled)
     touch_robot_description_content = None
-    if enable_touch_system:
+    if agent_type == 'touch':
         touch_robot_description_content = Command([
             FindExecutable(name='cat'), ' ',
             PathJoinSubstitution([
@@ -174,7 +173,7 @@ def launch_setup(context, *args, **kwargs):
     nodes_to_launch = []
     
     # Touch system nodes (if enabled) - STEP 1
-    if enable_touch_system:
+    if agent_type == 'touch':
         # Touch haptic device component
         touch_haptic_component = ComposableNode(
             package='touch_common',
@@ -288,8 +287,8 @@ def launch_setup(context, *args, **kwargs):
         agent_start_delay = 2.5
     
     # FINAL STEP: Start GUI if save_episode is enabled (after agent)
-    if save_episode and gui_node:
-        gui_start_delay = 9.0 if enable_touch_system else 5.0
+    if save_episode and gui_node and agent_type in ['gello', 'touch']:
+        gui_start_delay = 9.0 
         delayed_gui = TimerAction(
             period=gui_start_delay,  # Start GUI after agent is fully initialized
             actions=[gui_node]
@@ -323,12 +322,12 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'save_episode',
-            default_value='true',
+            default_value='false',
             description='Whether to save episodes'
         ),
         DeclareLaunchArgument(
             'agent_type',
-            default_value='touch',
+            default_value='act',
             description='Type of agent to use (gello, touch, act, dummy)'
         ),
         DeclareLaunchArgument(
@@ -370,11 +369,6 @@ def generate_launch_description():
         ),
         
         # System parameters
-        DeclareLaunchArgument(
-            'enable_touch_system',
-            default_value='true',
-            description='Whether to enable touch system nodes'
-        ),
         DeclareLaunchArgument(
             'num_threads',
             default_value='4',

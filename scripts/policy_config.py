@@ -18,7 +18,7 @@ os.environ["DEVICE"] = device
 # task config (you can add new tasks)
 TASK_CONFIG = {
     "task_name": "grinding_test",
-    "dataset_dir": "/home/ros/onolab_ros2/ros2_ws/src/gello_ros/scripts/episode_data/20250830_213515_grinding_test",
+    "dataset_dir": "/home/ros/onolab_ros2/ros2_ws/src/gello_ros/scripts/episode_data/20250901_151810_grinding_test",
     "state_dim": 12,
     "action_dim": 12,
     "camera_names": ["bottom_camera_rgb"],

@@ -8,6 +8,9 @@ from typing import List
 from functools import partial
 
 import numpy as np
+import torch    
+import torch.nn as nn
+
 from policy_config import (
     POLICY_CONFIG,
     TASK_CONFIG,
@@ -17,6 +20,7 @@ from gello_ros.agents.agent import DummyAgent
 from gello_ros.agents.gello_agent import GelloAgent
 from gello_ros.agents.touch_agent import TouchAgent
 from gello_ros.agents.act_agent import ACTAgent
+from gello_ros.agents.comp_act_agent import CompACTAgent
 from gello_ros.data_utils.save_episode import save_episode
 from gello_ros.env import RobotEnv
 from gello_ros.robots.robot import PrintRobot
@@ -299,7 +303,7 @@ class AgentNode(Node):
                 self.agent = DummyAgent(num_dofs=self.robot.num_dofs())
                 self.obs = self.env.get_obs()
                 
-            elif self.agent_type == "act":
+            elif self.agent_type == "act" or self.agent_type == "comp_act":
                 self.env = RobotEnv(
                     self.robot, 
                     control_rate_hz=self.hz, 
@@ -324,9 +328,14 @@ class AgentNode(Node):
                 self.get_logger().info("ACT policy loaded")
                 if self.camera_names is None:
                     raise ValueError("Camera names not provided")
-                self.agent = ACTAgent(
-                    policy, self.camera_names, train_cfg, policy_config, task_cfg=cfg, device=device
-                )
+                if self.agent_type == "comp_act":
+                    self.agent = CompACTAgent(
+                        policy, self.camera_names, train_cfg, policy_config, task_cfg=cfg, device=device
+                    )
+                elif self.agent_type == "act":
+                    self.agent = ACTAgent(
+                        policy, self.camera_names, train_cfg, policy_config, task_cfg=cfg, device=device
+                    )
 
                 # Initialize obs
                 self.obs = self.env.get_obs()
@@ -403,10 +412,25 @@ class AgentNode(Node):
         try:
             while rclpy.ok() and not self.shutdown_requested:
                 # Spin agent if it's a node (e.g., TouchAgent)
-                if isinstance(self.agent, Node):
-                    rclpy.spin_once(self.agent, timeout_sec=0.001)
-
-                if self.use_save_interface:
+                if self.agent_type in ["touch", "gello"] and self.obs is None:
+                    if isinstance(self.agent, Node):
+                        rclpy.spin_once(self.agent, timeout_sec=0.001)
+                
+                if self.agent_type == "act" or self.agent_type == "comp_act":
+                    if self.obs is None:
+                        self.obs = self.env.get_obs()
+                    self.get_logger().info("Moving to the home pose...")
+                    action = {'ee_pos': self.robot_home_pose_with_touch[:3], 'ee_quat': self.robot_home_pose_with_touch[3:]}
+                    for _ in range(self.hz * 5):  # Move for 5 seconds
+                        self.obs=self.env.step(action)
+                    for t in range(self.number_of_steps):
+                        time_passed = time.time() - start_time
+                        step_st = time.time()
+                        action = self.agent.act(self.obs, t)
+                        self.obs = self.env.step(action)
+                        message = f"Agent {self.agent_type} Steps: {t} Time passed: {round(time_passed, 2)} Step: {t} Time for step: {round((time.time() - step_st)*1000,1)} ms"
+                        self.get_logger().info(message)
+                elif self.use_save_interface:
                     if self.button_state == "start":                                   
 
                         obs_replay = []
@@ -474,17 +498,6 @@ class AgentNode(Node):
                     else:
                         raise ValueError(f"Invalid state {self.button_state}")
 
-                elif self.agent_type == "act":
-                    if self.obs is None:
-                        self.obs = self.env.get_obs()
-                    # Run the agent
-                    for t in range(self.number_of_steps):
-                        time_passed = time.time() - start_time
-                        step_st = time.time()
-                        action = self.agent.act(self.obs, t)
-                        self.obs = self.env.step(action)
-                        message = f"Time passed: {round(time_passed, 2)} Step: {t} Time for step: {round((time.time() - step_st)*1000,1)} ms"
-                        self.get_logger().info(message)
                 else:
                     step_st = time.time()
                     
@@ -497,7 +510,7 @@ class AgentNode(Node):
                     step_time = (time.time() - step_start) * 1000
                     
                     total_time = (time.time() - step_st) * 1000
-                    self.get_logger().info(f"Timing: act={act_time:.1f}ms, step={step_time:.1f}ms, total={total_time:.1f}ms")
+                    self.get_logger().info(f"Agent {self.agent_type} Timing: act={act_time:.1f}ms, step={step_time:.1f}ms, total={total_time:.1f}ms")
         except KeyboardInterrupt:
             self.get_logger().info("ROS node interrupted by Ctrl+C")
             self.shutdown_requested = True

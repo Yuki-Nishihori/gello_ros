@@ -22,7 +22,7 @@ class ACTPolicy(nn.Module):
         self.kl_weight = args_override["kl_weight"]
         print(f"KL Weight {self.kl_weight}")
 
-    def __call__(self, qpos, image, ft, actions=None, is_pad=None):
+    def __call__(self, qpos, image, ft=None, actions=None, is_pad=None):
         env_state = None
         normalize = transforms.Normalize(
             mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
