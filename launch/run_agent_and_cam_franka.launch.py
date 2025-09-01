@@ -97,7 +97,7 @@ def launch_setup(context, *args, **kwargs):
             ])
         ])
     
-    # Create USB Camera Component
+    # Create USB Camera Component with shared memory support
     camera_component = ComposableNode(
         package='usb_cam',
         plugin='usb_cam::UsbCamNode',
@@ -115,12 +115,13 @@ def launch_setup(context, *args, **kwargs):
             'frame_id': f'{camera_name}_optical_frame',
         }],
         remappings=[
-            ('image_raw', 'color/image_raw')
+            ('image_raw', 'color/image_raw'),
+            ('image_raw/shm', 'color/image_raw/shm')
         ],
         extra_arguments=[{'use_intra_process_comms': True}],
     )
     
-    # Agent Node (Python standalone - component integration is more complex)
+    # Agent Node (Python standalone - optimized with shared memory communication)
     agent_node = Node(
         package='gello_ros',
         executable='run_agent_component.py',
@@ -138,6 +139,10 @@ def launch_setup(context, *args, **kwargs):
                 'component_mode': True,  # Enable component mode
                 'camera_names': [camera_name],  # Pass camera name to agent
             }
+        ],
+        remappings=[
+            # Remap camera topic to use shared memory transport for high-speed communication
+            (f'/{camera_name}/color/image_raw', f'/{camera_name}/color/image_raw/shm')
         ]
     )
     
