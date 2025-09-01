@@ -10,7 +10,7 @@
     use_gripper: False
     use_FT_sensor: True
     touch_max_force: 3.3
-    force_scale_to_touch: 0.8
+    force_scale_to_touch: 0.3
 
 
     # camera config
