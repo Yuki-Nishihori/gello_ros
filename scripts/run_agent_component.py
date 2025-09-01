@@ -412,11 +412,10 @@ class AgentNode(Node):
         try:
             while rclpy.ok() and not self.shutdown_requested:
                 # Spin agent if it's a node (e.g., TouchAgent)
-                if self.agent_type in ["touch", "gello"] and self.obs is None:
-                    if isinstance(self.agent, Node):
-                        rclpy.spin_once(self.agent, timeout_sec=0.001)
+                if self.agent_type in ["touch", "gello"]:
+                    rclpy.spin_once(self.agent, timeout_sec=0.001)
                 
-                if self.agent_type == "act" or self.agent_type == "comp_act":
+                if self.agent_type in ["act", "comp_act"]:
                     if self.obs is None:
                         self.obs = self.env.get_obs()
                     self.get_logger().info("Moving to the home pose...")
@@ -430,6 +429,7 @@ class AgentNode(Node):
                         self.obs = self.env.step(action)
                         message = f"Agent {self.agent_type} Steps: {t} Time passed: {round(time_passed, 2)} Step: {t} Time for step: {round((time.time() - step_st)*1000,1)} ms"
                         self.get_logger().info(message)
+                
                 elif self.use_save_interface:
                     if self.button_state == "start":                                   
 
@@ -452,8 +452,7 @@ class AgentNode(Node):
                             
                         st_episode = time.time()
                         for i in range(self.number_of_steps):
-                            if isinstance(self.agent, Node):
-                                rclpy.spin_once(self.agent, timeout_sec=0.001)
+                            rclpy.spin_once(self.agent, timeout_sec=0.001)
 
                             # Check if user wants to quit mid-episode
                             if self.button_state == "quit":
@@ -489,7 +488,7 @@ class AgentNode(Node):
                         step_time = (time.time() - step_start) * 1000
                         
                         total_time = (time.time() - step_st) * 1000
-                        self.get_logger().info(f"Timing: act={act_time:.1f}ms, step={step_time:.1f}ms, total={total_time:.1f}ms")
+                        self.get_logger().info(f"Agent={self.agent_type} act={act_time:.1f}ms, step={step_time:.1f}ms, total={total_time:.1f}ms")
                         rclpy.spin_once(self, timeout_sec=0.0001) # Update button state
         
                     elif self.button_state == "quit":
@@ -510,7 +509,7 @@ class AgentNode(Node):
                     step_time = (time.time() - step_start) * 1000
                     
                     total_time = (time.time() - step_st) * 1000
-                    self.get_logger().info(f"Agent {self.agent_type} Timing: act={act_time:.1f}ms, step={step_time:.1f}ms, total={total_time:.1f}ms")
+                    self.get_logger().info(f"Agent={self.agent_type} act={act_time:.1f}ms, step={step_time:.1f}ms, total={total_time:.1f}ms")
         except KeyboardInterrupt:
             self.get_logger().info("ROS node interrupted by Ctrl+C")
             self.shutdown_requested = True
