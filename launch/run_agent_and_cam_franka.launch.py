@@ -180,17 +180,34 @@ def launch_setup(context, *args, **kwargs):
     
     # Touch system nodes (if enabled) - STEP 1
     if enable_touch_system:
-        # Touch state node
-        touch_state_node = Node(
+        # Touch haptic device component
+        touch_haptic_component = ComposableNode(
             package='touch_common',
-            executable='touch_state',
-            name='touch_state',
+            plugin='TouchROS',
+            name='touch_haptic_node',
             namespace='touch',
-            output='screen',
             parameters=[
                 touch_config,
-                {'robot_description': ParameterValue(value=touch_robot_description_content, value_type=str)}
-            ]
+                {
+                    'robot_description': ParameterValue(value=touch_robot_description_content, value_type=str),
+                    'device_name': 'Default Device',
+                    'publish_rate': 1000,
+                    'reference_frame': 'touch_base',
+                    'units': 'mm'
+                }
+            ],
+            extra_arguments=[{'use_intra_process_comms': True}],
+        )
+        
+        # Touch component container
+        touch_container = ComposableNodeContainer(
+            name='touch_container',
+            namespace='touch',
+            package='rclcpp_components',
+            executable='component_container_mt',
+            composable_node_descriptions=[touch_haptic_component],
+            parameters=[{'use_intra_process_comms': True}],
+            output='screen',
         )
         
         # Touch robot state publisher
@@ -225,12 +242,12 @@ def launch_setup(context, *args, **kwargs):
         )
         nodes_to_launch.append(delayed_touch_rsp)
         
-        # STEP 3: Start touch_state with sufficient initialization time
-        delayed_touch_state = TimerAction(
+        # STEP 3: Start touch component container with sufficient initialization time
+        delayed_touch_container = TimerAction(
             period=1.0,  # More time for URDF loading
-            actions=[touch_state_node]
+            actions=[touch_container]
         )
-        nodes_to_launch.append(delayed_touch_state)
+        nodes_to_launch.append(delayed_touch_container)
         
         # STEP 4: Start camera after touch system is stable
         delayed_camera_container = TimerAction(
