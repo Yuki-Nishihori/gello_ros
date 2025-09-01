@@ -158,7 +158,7 @@ def launch_setup(context, *args, **kwargs):
     
     # GUI Node (only when save_episode is enabled)
     gui_node = None
-    if save_episode:
+    if save_episode and agent_type in ['gello', 'touch']:
         gui_node = Node(
             package='gello_ros',
             executable='run_GUI_component.py',
@@ -327,8 +327,8 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'agent_type',
-            default_value='comp_act',
-            description='Type of agent to use (gello, touch, act, dummy)'
+            default_value='touch',
+            description='Type of agent to use (gello, touch, act, comp_act, dummy)'
         ),
         DeclareLaunchArgument(
             'skip_initial_move',
