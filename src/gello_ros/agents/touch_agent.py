@@ -293,11 +293,13 @@ class TouchAgent(Agent, Node):
             msg.pose.position.x, msg.pose.position.y, msg.pose.position.z,
             quat[0], quat[1], quat[2], quat[3]
         ])
+        self.get_logger().debug(f"Received Touch pose: {np.round(self._touch_current_pose, 3)}")
 
     def button_callback(self, msg: TouchButtonEvent) -> None:
         """Touchデバイスのボタン状態を購読し、フラグを更新します。"""
         self._is_teleop_active = (msg.white_button == 1)
         self._is_z_lock_active = (msg.grey_button == 1)
+        self.get_logger().debug(f"Received Button event: white_button={msg.white_button}, grey_button={msg.grey_button}")
         
     def transform_wrench_kdl(
         self, wrench_array: np.ndarray, joint_positions: np.ndarray
