@@ -327,7 +327,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'agent_type',
-            default_value='act',
+            default_value='comp_act',
             description='Type of agent to use (gello, touch, act, dummy)'
         ),
         DeclareLaunchArgument(

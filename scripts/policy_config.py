@@ -39,9 +39,9 @@ POLICY_CONFIG = {
     "dec_layers": 7,
     "nheads": 8,
     "camera_names": ["bottom_rgb"],
-    "policy_class": "ACT",
+    "policy_class": "CompACT",
     "temporal_agg": False,
-    "include_ft": False,
+    "include_ft": True,
     "ft_as_obs": False,
 }
 
