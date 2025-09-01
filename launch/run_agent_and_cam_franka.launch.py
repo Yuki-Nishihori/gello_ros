@@ -97,7 +97,7 @@ def launch_setup(context, *args, **kwargs):
             ])
         ])
     
-    # Create USB Camera Component (to be started after touch system)
+    # Create USB Camera Component
     camera_component = ComposableNode(
         package='usb_cam',
         plugin='usb_cam::UsbCamNode',
@@ -120,23 +120,7 @@ def launch_setup(context, *args, **kwargs):
         extra_arguments=[{'use_intra_process_comms': True}],
     )
     
-    # Create ComponentManager container (initially empty, components loaded later)
-    main_container = ComposableNodeContainer(
-        name='franka_integrated_container',
-        namespace='',
-        package='rclcpp_components',
-        executable='component_container_mt',  # Multi-threaded container
-        composable_node_descriptions=[],  # Start empty, load components in sequence
-        parameters=[
-            {
-                'use_intra_process_comms': True,
-                'num_threads': num_threads,
-            }
-        ],
-        output='screen',
-    )
-    
-    # Agent Node (Python with component mode)
+    # Agent Node (Python standalone - component integration is more complex)
     agent_node = Node(
         package='gello_ros',
         executable='run_agent_component.py',
@@ -157,6 +141,22 @@ def launch_setup(context, *args, **kwargs):
         ]
     )
     
+    # Create ComponentManager container for camera
+    camera_container = ComposableNodeContainer(
+        name='camera_container',
+        namespace='',
+        package='rclcpp_components',
+        executable='component_container_mt',
+        composable_node_descriptions=[camera_component],
+        parameters=[
+            {
+                'use_intra_process_comms': True,
+                'num_threads': num_threads,
+            }
+        ],
+        output='screen',
+    )
+    
     # GUI Node (only when save_episode is enabled)
     gui_node = None
     if save_episode:
@@ -170,8 +170,8 @@ def launch_setup(context, *args, **kwargs):
             }]
         )
     
-    # Start with ComponentManager container
-    nodes_to_launch = [main_container, leptrino_container]
+    # Start with ComponentManager containers
+    nodes_to_launch = [leptrino_container]
     
     # Touch system nodes (if enabled) - STEP 1
     if enable_touch_system:
@@ -224,55 +224,41 @@ def launch_setup(context, *args, **kwargs):
             )
         ])
         
-        # STEP 2: Start USB camera after touch system is ready
+        # STEP 2: Start camera container after touch system is ready
         delayed_camera_container = TimerAction(
             period=1.5,  # After touch system is fully initialized
-            actions=[
-                ComposableNodeContainer(
-                    name='camera_container',
-                    namespace='',
-                    package='rclcpp_components',
-                    executable='component_container_mt',
-                    composable_node_descriptions=[camera_component],
-                    parameters=[{'use_intra_process_comms': True}],
-                    output='screen',
-                )
-            ]
+            actions=[camera_container]
         )
         nodes_to_launch.append(delayed_camera_container)
         
         # STEP 3: Start agent after camera is ready
-        agent_start_delay = 2.5
+        delayed_agent = TimerAction(
+            period=2.5,  # After camera is ready
+            actions=[agent_node]
+        )
+        nodes_to_launch.append(delayed_agent)
+        
     else:
-        # No touch system - start camera earlier
+        # No touch system - start camera container earlier
         delayed_camera_container = TimerAction(
             period=0.5,
-            actions=[
-                ComposableNodeContainer(
-                    name='camera_container',
-                    namespace='',
-                    package='rclcpp_components',
-                    executable='component_container_mt',
-                    composable_node_descriptions=[camera_component],
-                    parameters=[{'use_intra_process_comms': True}],
-                    output='screen',
-                )
-            ]
+            actions=[camera_container]
         )
         nodes_to_launch.append(delayed_camera_container)
-        agent_start_delay = 1.0
-    
-    # STEP 3: Start agent node last
-    delayed_agent = TimerAction(
-        period=agent_start_delay,
-        actions=[agent_node]
-    )
-    nodes_to_launch.append(delayed_agent)
+        
+        # Start agent after camera
+        delayed_agent = TimerAction(
+            period=1.5,
+            actions=[agent_node]
+        )
+        nodes_to_launch.append(delayed_agent)
+        agent_start_delay = 1.5
     
     # STEP 4: Start GUI if save_episode is enabled (after agent)
     if save_episode and gui_node:
+        gui_start_delay = 3.0 if enable_touch_system else 2.0
         delayed_gui = TimerAction(
-            period=agent_start_delay + 1.0,  # Start GUI 1 second after agent
+            period=gui_start_delay,  # Start GUI after agent
             actions=[gui_node]
         )
         nodes_to_launch.append(delayed_gui)

@@ -32,7 +32,7 @@ from sensor_msgs.msg import Image
 from std_msgs.msg import String, Header
 from cv_bridge import CvBridge
 import threading
-import asyncio
+import traceback
 
 
 
@@ -313,6 +313,7 @@ class AgentNode(Node):
                 self.env = RobotEnv(
                     self.robot, 
                     control_rate_hz=self.hz, 
+                    camera_names=list(self.camera_names),
                     control_mode="joint"
                 )
                 self.agent = DummyAgent(num_dofs=self.robot.num_dofs())
@@ -322,6 +323,7 @@ class AgentNode(Node):
                 self.env = RobotEnv(
                     self.robot, 
                     control_rate_hz=self.hz, 
+                    camera_names=list(self.camera_names),
                     control_mode=self.control_mode
                 )
                 # load config
@@ -357,14 +359,7 @@ class AgentNode(Node):
             self.get_logger().fatal(f"Failed to initialize agent, shutting down. Error: {e}")
             sys.exit(1)
     
-    # Removed _update_full_obs, _get_obs, _add_images_to_obs
-    def _add_images_to_obs(self):
-        """Populates self.obs with the latest camera images."""
-        rclpy.spin_once(self, timeout_sec=0.001)
-        if self.obs is None:
-            return
-        for camera_name in self.camera_names:
-            self.obs[f"{camera_name}_rgb"] = self.camera_images.get(camera_name)
+    # Images are now handled by RobotEnv with zero-copy - no need for separate _add_images_to_obs
 
     def _initialize_touch_agent_sequence(self):
         """Initializes the TouchAgent and its pose, handling the initial move logic."""
@@ -372,6 +367,7 @@ class AgentNode(Node):
         self.env = RobotEnv(
             self.robot, 
             control_rate_hz=self.hz, 
+            camera_names=list(self.camera_names),
             control_mode=self.control_mode
         )
         self.get_logger().info("Using 3D Systems Touch agent")
@@ -460,7 +456,6 @@ class AgentNode(Node):
                             step_st = time.time()
                             action = self.agent.act(self.obs)
                             obs_new = self.env.step(action)
-                            self._add_images_to_obs()
                             action_replay.append(action)
                             obs_replay.append(self.obs) # Append obs before it's updated
                             self.obs = obs_new
@@ -478,7 +473,7 @@ class AgentNode(Node):
                         step_st = time.time()
                         action = self.agent.act(self.obs)
                         self.obs = self.env.step(action)
-                        self._add_images_to_obs()
+                        rclpy.spin_once(self, timeout_sec=0.0001) # Update button state
                         message = f"Waiting for the next episode. Time for step: {round((time.time() - step_st)*1000,1)} ms"
                         self.get_logger().info(message)
                     elif self.button_state == "quit":
@@ -496,7 +491,6 @@ class AgentNode(Node):
                         step_st = time.time()
                         action = self.agent.act(self.obs, t)
                         self.obs = self.env.step(action)
-                        self._add_images_to_obs()
                         message = f"Time passed: {round(time_passed, 2)} Step: {t} Time for step: {round((time.time() - step_st)*1000,1)} ms"
                         self.get_logger().info(message)
                 else:
@@ -508,7 +502,6 @@ class AgentNode(Node):
                     
                     step_start = time.time()
                     self.obs = self.env.step(action)
-                    self._add_images_to_obs()
                     step_time = (time.time() - step_start) * 1000
                     
                     total_time = (time.time() - step_st) * 1000
@@ -549,7 +542,22 @@ def main():
         print("Shutdown complete")
 
 
-# Component entry point for ROS2 ComponentManager
+# Component class for ROS2 ComponentManager
+class AgentComponent(AgentNode):
+    """ROS2 Component wrapper for AgentNode"""
+    def __init__(self, options=None):
+        super().__init__(component_mode=True)
+        # Component automatically starts execution
+        threading.Thread(target=self._component_run, daemon=True).start()
+    
+    def _component_run(self):
+        """Component execution thread"""
+        try:
+            self.run()
+        except Exception as e:
+            self.get_logger().error(f"Component execution error: {e}")
+
+# Component entry point for ROS2 ComponentManager  
 def get_agent_node_component():
     """Entry point for component manager"""
     def _create_node(*args, **kwargs):

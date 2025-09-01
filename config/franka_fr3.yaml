@@ -1,6 +1,6 @@
 /**:
   ros__parameters:
-    control_hz: 1000
+    control_hz: 500
 
     # Franka Robot (fr3) のジョイント名
     joint_names_order:
