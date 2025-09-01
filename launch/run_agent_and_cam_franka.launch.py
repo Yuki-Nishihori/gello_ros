@@ -139,10 +139,6 @@ def launch_setup(context, *args, **kwargs):
                 'camera_names': [camera_name],  # Pass camera name to agent
             }
         ],
-        remappings=[
-            # Remap camera topic to use shared memory transport for high-speed communication
-            (f'/{camera_name}/color/image_raw', f'/{camera_name}/color/image_raw/shm')
-        ]
     )
     
     # Create ComponentManager container for camera
