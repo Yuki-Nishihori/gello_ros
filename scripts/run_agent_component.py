@@ -428,11 +428,6 @@ class AgentNode(Node):
 
                 if self.use_save_interface:
                     if self.button_state == "start":                                   
-                        self.get_logger().info("Moving to the home pose...")
-                        action = {'ee_pos': self.robot_home_pose_with_touch[:3], 'ee_quat': self.robot_home_pose_with_touch[3:]}
-                        for _ in range(self.hz * 5):  # Move for 5 seconds
-                            self.obs=self.env.step(action)
-                            self.agent.act(self.obs,force_pose_update=True)
 
                         obs_replay = []
                         action_replay = []
@@ -440,9 +435,17 @@ class AgentNode(Node):
                             self.get_logger().warn("Can't start new episode, current episode is still saving")
                             self.button_state = "pass"
                             continue
+                        
                         if (current_episode_number + 1) > self.number_of_episodes:
                             self.get_logger().info("All episodes done")
                             break
+                        
+                        self.get_logger().info("Moving to the home pose...")
+                        action = {'ee_pos': self.robot_home_pose_with_touch[:3], 'ee_quat': self.robot_home_pose_with_touch[3:]}
+                        for _ in range(self.hz * 5):  # Move for 5 seconds
+                            self.obs=self.env.step(action)
+                            self.agent.act(self.obs,force_pose_update=True)
+                            
                         st_episode = time.time()
                         for i in range(self.number_of_steps):
                             if isinstance(self.agent, Node):
