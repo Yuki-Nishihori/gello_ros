@@ -1,10 +1,15 @@
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List
+from functools import partial
 
 import numpy as np
+import rclpy
+from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
+from sensor_msgs.msg import Image
 
-from gello_ros.cameras.camera import CameraDriver
 from gello_ros.robots.robot import Robot
+
 
 
 class Rate:
@@ -18,19 +23,20 @@ class Rate:
         self.last = time.time()
 
 
-class RobotEnv:
+class RobotEnv(Node):
     def __init__(
         self,
         robot: Robot,
         control_rate_hz: float = 100.0,
-        camera_dict: Optional[Dict[str, CameraDriver]] = None,
         control_mode: str = "cartesian",
+        node_name: str = "robot_env",
     ) -> None:
+        super().__init__(node_name)
         assert control_mode in ["joint", "cartesian"]
         self._robot = robot
         self._rate = Rate(control_rate_hz)
-        self._camera_dict = {} if camera_dict is None else camera_dict
         self._control_mode = control_mode
+        
 
     def robot(self) -> Robot:
         """Get the robot object.
@@ -43,49 +49,39 @@ class RobotEnv:
     def __len__(self):
         return 0
 
-    def step(self, action: np.ndarray) -> Dict[str, Any]:
+    def step(self, action: Dict[str, np.ndarray]) -> Dict[str, Any]:
         
         if self._control_mode == "cartesian":
-            assert action["ee_quat"] is not np.zeros(4)
-            assert action["ee_pos"] is not np.zeros(3)
-            pos_quat = np.concatenate([action["ee_pos"], action["ee_quat"]])
-            self._robot.command_pose(pos_quat)
+            # Ensure keys exist before accessing
+            if "ee_pos" in action and "ee_quat" in action:
+                pos_quat = np.concatenate([action["ee_pos"], action["ee_quat"]])
+                self._robot.command_pose(pos_quat)
         elif self._control_mode == "joint":
-            assert action["joint_positions"] is not np.zeros(6)
-            self._robot.command_joint_state(action["joint_positions"])
+            if "joint_positions" in action:
+                self._robot.command_joint_state(action["joint_positions"])
         else:
-            raise ValueError("Invalid control mode")
+            raise ValueError(f"Invalid control mode: {self._control_mode}")
         
         self._rate.sleep()
         return self.get_obs()
     
     def get_obs(self) -> Dict[str, Any]:
-        """Get observation from the environment.
+        """Get observation from the environment."""
+        # Only spin robot node to update robot states
+        # Camera updates are handled by the main spin loop in component mode
+        rclpy.spin_once(self._robot, timeout_sec=0.001)
 
-        Returns:
-            obs: observation from the environment.
-        """
         observations = {}
-        # for name, camera in self._camera_dict.items():
-        #     image = camera.read()
-        #     observations[f"{name}_rgb"] = image
-
-        robot_obs = self._robot.get_observations()
-        assert "joint_positions" in robot_obs
-        assert "joint_velocities" in robot_obs
-        assert "ee_pos" in robot_obs
-        observations["joint_positions"] = robot_obs["joint_positions"]
-        observations["joint_velocities"] = robot_obs["joint_velocities"]
-        observations["joint_torques"] = robot_obs["joint_torques"]
-        observations["ee_pos"] = robot_obs["ee_pos"]
-        observations["ee_quat"] = robot_obs["ee_quat"]
-        observations["ee_rot_matrix"] = robot_obs["ee_rot_matrix"]
-        observations["ee_euler"] = robot_obs["ee_euler"]
-        observations["gripper_position"] = robot_obs["gripper_position"]
-        observations["ee_wrench"] = robot_obs["ee_wrench"]
-        observations["jacobian"] = robot_obs["jacobian"]
         
-
+        robot_obs = self._robot.get_observations()
+        # It's safer to merge dictionaries
+        observations.update(robot_obs)
+        
+        # Ensure essential keys are present
+        assert "joint_positions" in observations
+        assert "joint_velocities" in observations
+        assert "ee_pos" in observations
+        
         return observations
 
 
