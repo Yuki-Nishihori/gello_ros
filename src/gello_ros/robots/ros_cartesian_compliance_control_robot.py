@@ -117,7 +117,7 @@ class CartesianComplianceControlRobot(Robot, Node):
         
         # Call zero reset service
         self.get_logger().info("Zero reset feedback FT sensor offset")
-        future = self.feedback_wrench_zero_client.call_async(Empty.Request())
+        future = self.feedback_wrench_zero_client.call_async(Trigger.Request())
         rclpy.spin_until_future_complete(self, future)
         if future.result() is None:
             self.get_logger().error("Failed to call feedback wrench zero service")
