@@ -198,7 +198,7 @@ class AgentNode(Node):
         """Initialize agent based on agent type"""
         if self.agent_type == "gello":
             assert self.control_mode in "joint"
-            self.env = RobotEnv(self.robot, control_rate_hz=self.hz, camera_dict=self.camera_clients, control_mode=self.control_mode)
+            self.env = RobotEnv(self.robot, control_rate_hz=self.hz, camera_names=list(self.camera_clients.keys()), control_mode=self.control_mode)
             self.get_logger().info("Using Gello agent")
             
             if self.gello_port is None:
@@ -296,7 +296,7 @@ class AgentNode(Node):
 
         elif self.agent_type == "touch":
             assert self.control_mode in "cartesian"
-            self.env = RobotEnv(self.robot, control_rate_hz=self.hz, camera_dict=self.camera_clients, control_mode=self.control_mode)
+            self.env = RobotEnv(self.robot, control_rate_hz=self.hz, camera_names=list(self.camera_clients.keys()), control_mode=self.control_mode)
             self.get_logger().info("Using 3D Systems Touch agent")
             # Initialize the touch agent
             self.agent = TouchAgent()
@@ -313,12 +313,12 @@ class AgentNode(Node):
             self.obs = obs
             
         elif self.agent_type == "dummy" or self.agent_type == "none":
-            self.env = RobotEnv(self.robot, control_rate_hz=self.hz, camera_dict=self.camera_clients, control_mode="joint")
+            self.env = RobotEnv(self.robot, control_rate_hz=self.hz, camera_names=list(self.camera_clients.keys()), control_mode="joint")
             self.agent = DummyAgent(num_dofs=self.robot.num_dofs())
             self.obs = self.env.get_obs()
             
         elif self.agent_type == "act":
-            self.env = RobotEnv(self.robot, control_rate_hz=self.hz, camera_dict=self.camera_clients, control_mode=self.control_mode)
+            self.env = RobotEnv(self.robot, control_rate_hz=self.hz, camera_names=list(self.camera_clients.keys()), control_mode=self.control_mode)
             # load config
             cfg = TASK_CONFIG
             policy_config = POLICY_CONFIG

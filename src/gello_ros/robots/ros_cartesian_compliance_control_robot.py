@@ -9,7 +9,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from geometry_msgs.msg import PoseStamped, WrenchStamped
-from std_srvs.srv import Empty
+from std_srvs.srv import Trigger
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from kdl_parser_py.kdl_helper import KDLHelper
 from pytracik.trac_ik import TracIK
@@ -89,7 +89,7 @@ class CartesianComplianceControlRobot(Robot, Node):
         # Compliance control wrench zero service
         if hasattr(self, 'compliance_control_wrench_zero_service'):
             self.compliance_wrench_zero_client = self.create_client(
-                Empty, 
+                Trigger, 
                 self.compliance_control_wrench_zero_service
             )
             
@@ -98,15 +98,14 @@ class CartesianComplianceControlRobot(Robot, Node):
             if self.compliance_wrench_zero_client.wait_for_service(timeout_sec=5.0):
                 # Call zero reset service
                 self.get_logger().info("Zero reset compliance control FT sensor offset")
-                future = self.compliance_wrench_zero_client.call_async(Empty.Request())
-                rclpy.spin_until_future_complete(self, future)
+                future = self.compliance_wrench_zero_client.call_async(Trigger.Request())
                 if future.result() is None:
                     self.get_logger().error("Failed to call compliance wrench zero service")
                 time.sleep(1)
 
         # Feedback wrench zero service
         self.feedback_wrench_zero_client = self.create_client(
-            Empty, 
+            Trigger, 
             self.feedback_wrench_zero_service
         )
         

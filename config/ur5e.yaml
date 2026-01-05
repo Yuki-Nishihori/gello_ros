@@ -45,9 +45,9 @@
     cartesian_impedance_controller_command_topic: "/cartesian_impedance_controller/target_frame"
     # sensor topic  
     feedback_wrench_sensor_frame: "tool0"
-    compliance_control_wrench_zero_service: "/ft_sensor_wrench_filtered/zero_ftsensor"
+    compliance_control_wrench_zero_service: "/io_and_status_controller/zero_ftsensor"
     feedback_wrench_topic: "/ft_sensor_wrench"
-    feedback_wrench_zero_service: "/ft_sensor_wrench_filtered/zero_ftsensor"
+    feedback_wrench_zero_service: "/io_and_status_controller/zero_ftsensor"
     # robot description
     joint_states_topic: "/joint_states"
     robot_description_name: "/robot_description"
